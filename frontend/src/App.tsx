@@ -8,7 +8,7 @@ import {
 } from './spacetimedb';
 import { LiveDebtConstellation } from './components/LiveDebtConstellation';
 import { KarmaBar } from './components/KarmaBar';
-import { useUser } from './module_bindings/hooks';
+
 
 // @ts-ignore - The user requested these exact imports.
 import { createUser } from "./module_bindings/create_user_reducer";
@@ -22,7 +22,6 @@ function App() {
   const [isReady, setIsReady] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
-  const users = useUser();
 
   useEffect(() => {
     initSpacetimeDB();
