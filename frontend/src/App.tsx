@@ -10,9 +10,18 @@ import { LiveDebtConstellation } from './components/LiveDebtConstellation';
 import { KarmaBar } from './components/KarmaBar';
 import { useUser } from './module_bindings/hooks';
 
+// @ts-ignore - The user requested these exact imports.
+import { createUser } from "./module_bindings/create_user_reducer";
+// @ts-ignore
+import { createTrip } from "./module_bindings/create_trip_reducer";
+// @ts-ignore
+import { addExpense } from "./module_bindings/add_expense_reducer";
+
 function App() {
   const [isConnected, setIsConnected] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [uiError, setUiError] = useState<string | null>(null);
   const users = useUser();
 
   useEffect(() => {
@@ -21,6 +30,7 @@ function App() {
     const onConnectUnsub = onSpacetimeConnect(() => {
       setIsConnected(true);
       setConnectionError(null);
+      setIsReady(true);
       // We must subscribe to tables to receive data in V2
       if (conn) {
         conn.subscriptionBuilder().onApplied(() => {}).subscribe(["SELECT * FROM user", "SELECT * FROM expense_split", "SELECT * FROM expense", "SELECT * FROM trip"]);
@@ -29,10 +39,12 @@ function App() {
 
     const onConnectErrorUnsub = onSpacetimeConnectError((err) => {
       setConnectionError(err.message || 'Failed to connect');
+      setIsReady(false);
     });
 
     const onDisconnectUnsub = onSpacetimeDisconnect(() => {
       setIsConnected(false);
+      setIsReady(false);
     });
 
     return () => {
@@ -43,50 +55,29 @@ function App() {
   }, []);
 
   const handleCreateTestUsers = () => {
-    if (!conn) return;
+    setUiError(null);
     try {
-      conn.reducers.createUser({ name: "Alice" });
-      conn.reducers.createUser({ name: "Bob" });
-      conn.reducers.createTrip({ tripId: "test-trip-1", name: "Vegas 2026" });
-    } catch (error) {
+      createUser("Alice");
+      createUser("Bob");
+      createTrip("trip-1", "Vegas Trip");
+    } catch (error: any) {
       console.error("Error creating test users:", error);
-      alert("Failed to create test users. Check console for details.");
+      setUiError(error.message || "Failed to create test users.");
     }
   };
 
   const handleSimulateExpense = () => {
-    if (!conn) return;
-    
-    // Find Alice and Bob
-    const alice = users.find(u => u.name === 'Alice');
-    const bob = users.find(u => u.name === 'Bob');
-    
-    if (users.length < 2 || !alice || !bob) {
-      alert("Please create users first");
-      return;
-    }
-
+    setUiError(null);
     try {
-      const expenseId = crypto.randomUUID();
-      const amount = 100;
-      const half = 50;
-
-      // Ensure exact match with generated ExpenseSplit type
       const splits = [
-        { expenseId, debtorId: alice.id.toHexString(), amountOwed: half },
-        { expenseId, debtorId: bob.id.toHexString(), amountOwed: half }
+        { debtor_id: "alice-1", amount_owed: 50 },
+        { debtor_id: "bob-1", amount_owed: 50 }
       ];
-
-      conn.reducers.addExpense({
-        expenseId,
-        tripId: "test-trip-1",
-        amount,
-        description: "Dinner",
-        splits: JSON.stringify(splits)
-      });
-    } catch (error) {
+      
+      addExpense("exp-1", "trip-1", 100, "Dinner", JSON.stringify(splits));
+    } catch (error: any) {
       console.error("Error simulating expense:", error);
-      alert("Failed to simulate expense. Check console for details.");
+      setUiError(error.message || "Failed to simulate expense.");
     }
   };
 
@@ -136,12 +127,20 @@ function App() {
         WebkitBackdropFilter: 'blur(12px)',
         borderTop: '1px solid rgba(255,255,255,0.1)',
         display: 'flex',
-        justifyContent: 'center',
+        flexDirection: 'column',
+        alignItems: 'center',
         gap: 'var(--space-16)',
         zIndex: 100
       }}>
-        <button onClick={handleCreateTestUsers}>Create Test Users</button>
-        <button className="primary" onClick={handleSimulateExpense}>Simulate Expense</button>
+        {uiError && (
+          <div style={{ color: 'var(--color-terracotta)', fontWeight: 'bold', textAlign: 'center' }}>
+            {uiError}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 'var(--space-16)' }}>
+          <button onClick={handleCreateTestUsers} disabled={!isReady}>Create Test Users</button>
+          <button className="primary" onClick={handleSimulateExpense} disabled={!isReady}>Simulate Expense</button>
+        </div>
       </div>
     </div>
   );
