@@ -1,93 +1,12 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface Star {
-  id: string;
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  r: number;
-  opacity: number;
-}
 
 interface Props {
   activeTripId: string | null;
 }
 
-// ─── Ambient Canvas (idle star drift) ────────────────────────────────────────
-const AmbientCanvas = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const starsRef = useRef<Star[]>([]);
-  const rafRef = useRef<number>(0);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
-    const W = () => canvas.width = window.innerWidth;
-    const H = () => canvas.height = window.innerHeight;
-    W(); H();
-
-    const onResize = () => { W(); H(); init(); };
-    window.addEventListener('resize', onResize);
-
-    const init = () => {
-      const count = Math.min(Math.floor(window.innerWidth / 15), 80);
-      starsRef.current = Array.from({ length: count }, (_, i) => ({
-        id: String(i),
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.12,
-        vy: (Math.random() - 0.5) * 0.12,
-        r: 1.0 + Math.random() * 2.0,
-        opacity: 0.1 + Math.random() * 0.3,
-      }));
-    };
-    init();
-
-    const tick = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const stars = starsRef.current;
-
-      for (const s of stars) {
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(156,174,169,${s.opacity})`;
-        ctx.fill();
-
-        s.x += s.vx;
-        s.y += s.vy;
-
-        if (s.x < -s.r) s.x = canvas.width + s.r;
-        else if (s.x > canvas.width + s.r) s.x = -s.r;
-        if (s.y < -s.r) s.y = canvas.height + s.r;
-        else if (s.y > canvas.height + s.r) s.y = -s.r;
-      }
-
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    tick();
-
-    return () => {
-      window.removeEventListener('resize', onResize);
-      cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        position: 'fixed', inset: 0,
-        width: '100%', height: '100%',
-        pointerEvents: 'none',
-      }}
-    />
-  );
-};
 
 // ─── Active Trip Graph ────────────────────────────────────────────────────────
 const TripGraph = ({ tripId }: { tripId: string }) => {
@@ -273,16 +192,7 @@ const TripGraph = ({ tripId }: { tripId: string }) => {
 // ─── Public Component ─────────────────────────────────────────────────────────
 export const LiveDebtConstellation = ({ activeTripId }: Props) => {
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden', background: '#050505' }}>
-      <motion.div
-        animate={activeTripId ? { opacity: 0, scale: 5 } : { opacity: 1, scale: 1 }}
-        transition={{ duration: 0.8, ease: [0.23, 1, 0.32, 1] }}
-        style={{ position: 'absolute', inset: 0, transformOrigin: 'center center' }}
-      >
-        <AmbientCanvas />
-      </motion.div>
-      
-      {/* Trip graph — fades in when a trip is selected */}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
       <motion.div
         animate={{ opacity: activeTripId ? 1 : 0 }}
         transition={{ duration: 0.8 }}

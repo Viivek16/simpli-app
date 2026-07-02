@@ -8,6 +8,7 @@ import { useExpense, useExpenseSplit } from './module_bindings/hooks';
 import { LiveDebtConstellation } from './components/LiveDebtConstellation';
 import { KarmaBar } from './components/KarmaBar';
 import { ExpenseModal } from './components/ExpenseModal';
+import { GalaxyBackground } from './components/GalaxyBackground';
 
 const EO = [0.23, 1, 0.32, 1] as const;
 
@@ -86,7 +87,7 @@ const TripRoom = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.6, ease: EO }}
+      transition={{ delay: 0.2, duration: 0.6, ease: EO }}
       style={{
         position: 'fixed', inset: 0, zIndex: 10,
         display: 'flex', flexDirection: 'column',
@@ -232,7 +233,6 @@ const Dashboard = ({
 }) => {
   const trips = useTrip();
   const [newTripName, setNewTripName] = useState('');
-  const [showFabInput, setShowFabInput] = useState(false);
   const [uiMsg, setUiMsg] = useState<{ text: string; err: boolean } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -242,7 +242,8 @@ const Dashboard = ({
     timerRef.current = setTimeout(() => setUiMsg(null), 3200);
   };
 
-  const handleCreate = useCallback(() => {
+  const handleCreate = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
     const name = newTripName.trim();
     if (!name) return;
     const c = SpacetimeDB.conn as any;
@@ -251,35 +252,27 @@ const Dashboard = ({
       const tripId = `trip-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       c.reducers.createTrip({ tripId, name });
       setNewTripName('');
-      setShowFabInput(false);
       onSelectTrip({ id: tripId, name });
     } catch (e: any) { flash(e?.message ?? 'Could not create trip.', true); }
   }, [newTripName, onSelectTrip]);
 
-  const getGalaxyPosition = (index: number) => {
-    // Deterministic pseudo-random placement
-    const col = index % 4;
-    const row = Math.floor(index / 4);
-    const x = 15 + col * 22 + (Math.sin(index * 4.3) * 5);
-    const y = 25 + row * 25 + (Math.cos(index * 3.1) * 8);
-    return { left: `${Math.max(10, Math.min(x, 85))}%`, top: `${Math.max(15, Math.min(y, 80))}%` };
-  };
-
   return (
     <motion.div
       key="dashboard"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 1.05 }}
       transition={{ duration: 0.6, ease: EO }}
       style={{
         position: 'fixed', inset: 0, zIndex: 10,
         display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
         pointerEvents: 'none',
       }}
     >
       {/* Top bar */}
       <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0,
         pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: '12px',
         padding: '24px 32px', background: 'transparent'
       }}>
@@ -299,101 +292,85 @@ const Dashboard = ({
         <button onClick={onLogout} style={{ ...BTN_GHOST, padding: '8px 16px', fontSize: '0.85rem' }}>Logout</button>
       </div>
 
-      <div style={{ position: 'absolute', top: 100, left: 32 }}>
-        <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#f8f9fa' }}>
-          Welcome back, {profile.name.split(' ')[0]}
-        </h1>
-        <p style={{ margin: '8px 0 0', color: '#8e8e93', fontSize: '1rem' }}>
-          Select a galaxy to view your trip.
-        </p>
-      </div>
+      {/* Floating Center Island */}
+      <div style={{
+        pointerEvents: 'all',
+        width: '100%', maxWidth: '640px',
+        background: 'rgba(20, 20, 25, 0.4)',
+        backdropFilter: 'blur(30px)',
+        WebkitBackdropFilter: 'blur(30px)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        borderRadius: '32px',
+        padding: '40px',
+        display: 'flex', flexDirection: 'column', gap: '32px',
+        boxShadow: '0 32px 80px rgba(0,0,0,0.6)'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <h1 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 800, letterSpacing: '-0.03em', color: '#f8f9fa' }}>
+            Welcome back, {profile.name.split(' ')[0]}
+          </h1>
+          <p style={{ margin: '8px 0 0', color: '#9caca9', fontSize: '1.1rem' }}>
+            Select a galaxy or forge a new one.
+          </p>
+        </div>
 
-      {/* Galaxies Map */}
-      <div style={{ position: 'absolute', inset: '140px 0 0 0', pointerEvents: 'all' }}>
-        {trips.map((trip, i) => (
-          <motion.div
-            key={trip.id}
-            initial={{ opacity: 0, scale: 0 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: i * 0.08, duration: 0.6, ease: EO }}
-            whileHover={{ scale: 1.15 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => onSelectTrip(trip)}
-            style={{
-              position: 'absolute', ...getGalaxyPosition(i),
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              cursor: 'pointer', transformOrigin: 'center center'
-            }}
-          >
-            {/* Glowing Orb */}
-            <div style={{
-              width: 80, height: 80, borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(156,174,169,0.9) 0%, rgba(156,174,169,0.2) 60%, transparent 100%)',
-              boxShadow: '0 0 40px rgba(156,174,169,0.5), inset 0 0 20px rgba(255,255,255,0.8)',
-              marginBottom: '12px'
-            }} />
-            <span style={{ 
-              color: '#f8f9fa', fontSize: '0.95rem', fontWeight: 700, 
-              background: 'rgba(0,0,0,0.6)', padding: '4px 12px', borderRadius: '12px',
-              backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' 
-            }}>
-              {trip.name}
-            </span>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* FAB: Create Galaxy */}
-      <div style={{ position: 'absolute', bottom: '40px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'all' }}>
-        <AnimatePresence mode="wait">
-          {!showFabInput ? (
-            <motion.button
-              key="fab"
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
-              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              onClick={() => setShowFabInput(true)}
-              style={{
-                background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-                border: '1px solid rgba(255,255,255,0.2)', borderRadius: '32px',
-                padding: '16px 32px', color: '#ffffff', fontWeight: 700, fontSize: '1.1rem',
-                cursor: 'pointer', boxShadow: '0 16px 40px rgba(0,0,0,0.5)',
-                display: 'flex', alignItems: 'center', gap: '10px'
-              }}
-            >
-              <span style={{ fontSize: '1.4rem' }}>+</span> Create New Galaxy
-            </motion.button>
+        {/* Trips List inside Island */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '40vh', overflowY: 'auto' }}>
+          {trips.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px', color: '#555' }}>You have no active trips.</div>
           ) : (
-            <motion.div
-              key="fab-input"
-              initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
-              style={{
-                background: 'rgba(15,15,15,0.9)', backdropFilter: 'blur(24px)',
-                border: '1px solid rgba(156,174,169,0.3)', borderRadius: '24px',
-                padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px',
-                width: '320px', boxShadow: '0 24px 64px rgba(0,0,0,0.6)'
-              }}
-            >
-              <h3 style={{ margin: 0, color: '#f8f9fa', fontSize: '1.1rem' }}>Name your new Galaxy</h3>
-              <input
-                autoFocus
-                value={newTripName} onChange={e => setNewTripName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleCreate()}
-                placeholder="E.g. Vegas 2026..."
+            trips.map((trip) => (
+              <motion.button
+                key={trip.id}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => onSelectTrip(trip)}
                 style={{
-                  width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.15)', borderRadius: '12px', padding: '12px 16px',
-                  color: 'white', fontSize: '1rem', outline: 'none'
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '16px', padding: '16px 24px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  cursor: 'pointer', textAlign: 'left',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+                  transition: 'background 200ms ease, border-color 200ms ease'
                 }}
-              />
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => setShowFabInput(false)} style={{ ...BTN_GHOST, flex: 1, padding: '12px' }}>Cancel</button>
-                <button onClick={handleCreate} disabled={!newTripName.trim()} style={{ background: '#9bafa4', color: '#000', border: 'none', borderRadius: '12px', flex: 1, fontWeight: 700, cursor: 'pointer', opacity: newTripName.trim() ? 1 : 0.5 }}>
-                  Ignite
-                </button>
-              </div>
-            </motion.div>
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(156,174,169,0.1)';
+                  e.currentTarget.style.borderColor = 'rgba(156,174,169,0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'radial-gradient(circle, rgba(156,174,169,0.8) 0%, rgba(156,174,169,0.2) 70%, transparent 100%)', boxShadow: '0 0 16px rgba(156,174,169,0.4)' }} />
+                  <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f8f9fa' }}>{trip.name}</span>
+                </div>
+                <span style={{ color: '#9caca9', fontWeight: 600 }}>Explore →</span>
+              </motion.button>
+            ))
           )}
-        </AnimatePresence>
+        </div>
+
+        <form onSubmit={handleCreate} style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+          <input
+            value={newTripName} onChange={e => setNewTripName(e.target.value)}
+            placeholder="Name your new galaxy..."
+            style={{
+              flex: 1, background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '16px 20px',
+              color: 'white', fontSize: '1rem', outline: 'none'
+            }}
+          />
+          <button type="submit" disabled={!newTripName.trim()} style={{ 
+            background: '#9bafa4', color: '#000', border: 'none', borderRadius: '16px', 
+            padding: '0 24px', fontWeight: 700, cursor: 'pointer', opacity: newTripName.trim() ? 1 : 0.5,
+            transition: 'opacity 200ms ease'
+          }}>
+            Create
+          </button>
+        </form>
       </div>
 
       <AnimatePresence>
@@ -401,7 +378,7 @@ const Dashboard = ({
           <motion.div
             initial={{ opacity: 0, y: -20, x: '-50%' }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
             style={{
-              position: 'absolute', top: '24px', left: '50%',
+              position: 'absolute', top: '90px', left: '50%',
               background: uiMsg.err ? 'rgba(217, 138, 108, 0.15)' : 'rgba(156, 174, 169, 0.15)',
               border: `1px solid ${uiMsg.err ? '#d98a6c' : '#9bafa4'}`,
               color: uiMsg.err ? '#d98a6c' : '#9bafa4',
@@ -423,16 +400,11 @@ const LoginView = ({ onLogin }: { onLogin: (p: GoogleProfile) => void }) => {
   const [dbError, setDbError] = useState<string | null>(null);
 
   useEffect(() => {
-    initSpacetimeDB();
     const u1 = SpacetimeDB.onSpacetimeConnect(() => setDbReady(true));
     const u2 = SpacetimeDB.onSpacetimeConnectError((e) => setDbError(e.message));
     const c = SpacetimeDB.conn;
     if (c) {
       setDbReady(true);
-      c.subscriptionBuilder().onApplied(() => {}).subscribe([
-        'SELECT * FROM user', 'SELECT * FROM trip',
-        'SELECT * FROM expense', 'SELECT * FROM expense_split',
-      ]);
     }
     return () => { u1(); u2(); };
   }, []);
@@ -443,10 +415,6 @@ const LoginView = ({ onLogin }: { onLogin: (p: GoogleProfile) => void }) => {
       const c = SpacetimeDB.conn as any;
       if (c) {
         try { c.reducers.createUser({ name: profile.name }); } catch { /* already exists */ }
-        c.subscriptionBuilder().onApplied(() => {}).subscribe([
-          'SELECT * FROM user', 'SELECT * FROM trip',
-          'SELECT * FROM expense', 'SELECT * FROM expense_split',
-        ]);
       }
       onLogin(profile);
     } catch (e) { console.error('[SIMPLI] JWT decode failed', e); }
@@ -541,6 +509,21 @@ function App() {
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const isConnected = useIsConnected();
 
+  // Initialize SpacetimeDB globally exactly once
+  useEffect(() => {
+    initSpacetimeDB();
+    const u1 = SpacetimeDB.onSpacetimeConnect(() => {
+      const c = SpacetimeDB.conn as any;
+      if (c) {
+        c.subscriptionBuilder().onApplied(() => {}).subscribe([
+          'SELECT * FROM user', 'SELECT * FROM trip',
+          'SELECT * FROM expense', 'SELECT * FROM expense_split',
+        ]);
+      }
+    });
+    return () => { u1(); };
+  }, []);
+
   useEffect(() => {
     const match = window.location.pathname.match(/^\/t\/([^/]+)/);
     if (match) {
@@ -583,6 +566,11 @@ function App() {
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100dvh', background: '#050505', overflow: 'hidden' }}>
+      
+      {/* 3D Galaxy WebGL Background */}
+      <GalaxyBackground activeTripId={selectedTrip?.id ?? null} />
+      
+      {/* 2D Heatmap SVG Overlay (Only visible when trip selected) */}
       <LiveDebtConstellation activeTripId={selectedTrip?.id ?? null} />
 
       <AnimatePresence mode="wait">
