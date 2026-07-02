@@ -45,9 +45,9 @@ function App() {
   const handleCreateTestUsers = () => {
     if (!conn) return;
     // Alice and Bob
-    conn.reducers.createUser("Alice");
-    conn.reducers.createUser("Bob");
-    conn.reducers.createTrip("test-trip-1", "Vegas 2026");
+    conn.reducers.createUser({ name: "Alice" });
+    conn.reducers.createUser({ name: "Bob" });
+    conn.reducers.createTrip({ tripId: "test-trip-1", name: "Vegas 2026" });
   };
 
   const handleSimulateExpense = () => {
@@ -71,13 +71,13 @@ function App() {
       { debtor_id: bob.id.toHexString(), amount_owed: half }
     ];
 
-    conn.reducers.addExpense(
+    conn.reducers.addExpense({
       expenseId,
-      "test-trip-1",
+      tripId: "test-trip-1",
       amount,
-      "Dinner",
-      JSON.stringify(splits)
-    );
+      description: "Dinner",
+      splits: JSON.stringify(splits)
+    });
   };
 
   return (
