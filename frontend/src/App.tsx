@@ -44,10 +44,14 @@ function App() {
 
   const handleCreateTestUsers = () => {
     if (!conn) return;
-    // Alice and Bob
-    conn.reducers.createUser({ name: "Alice" });
-    conn.reducers.createUser({ name: "Bob" });
-    conn.reducers.createTrip({ tripId: "test-trip-1", name: "Vegas 2026" });
+    try {
+      conn.reducers.createUser({ name: "Alice" });
+      conn.reducers.createUser({ name: "Bob" });
+      conn.reducers.createTrip({ tripId: "test-trip-1", name: "Vegas 2026" });
+    } catch (error) {
+      console.error("Error creating test users:", error);
+      alert("Failed to create test users. Check console for details.");
+    }
   };
 
   const handleSimulateExpense = () => {
@@ -62,22 +66,28 @@ function App() {
       return;
     }
 
-    const expenseId = crypto.randomUUID();
-    const amount = 100;
-    const half = 50;
+    try {
+      const expenseId = crypto.randomUUID();
+      const amount = 100;
+      const half = 50;
 
-    const splits = [
-      { debtor_id: alice.id.toHexString(), amount_owed: half },
-      { debtor_id: bob.id.toHexString(), amount_owed: half }
-    ];
+      // Ensure exact match with generated ExpenseSplit type
+      const splits = [
+        { expenseId, debtorId: alice.id.toHexString(), amountOwed: half },
+        { expenseId, debtorId: bob.id.toHexString(), amountOwed: half }
+      ];
 
-    conn.reducers.addExpense({
-      expenseId,
-      tripId: "test-trip-1",
-      amount,
-      description: "Dinner",
-      splits: JSON.stringify(splits)
-    });
+      conn.reducers.addExpense({
+        expenseId,
+        tripId: "test-trip-1",
+        amount,
+        description: "Dinner",
+        splits: JSON.stringify(splits)
+      });
+    } catch (error) {
+      console.error("Error simulating expense:", error);
+      alert("Failed to simulate expense. Check console for details.");
+    }
   };
 
   return (
