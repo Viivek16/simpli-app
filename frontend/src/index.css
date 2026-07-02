@@ -1,0 +1,132 @@
+:root {
+  /* Color Palette */
+  --color-anthracite: #1a1a1c;
+  --color-anthracite-light: #2b2b2e;
+  --color-sage: #9bafa4;
+  --color-sage-light: #b3c5bb;
+  --color-terracotta: #d97d5c;
+  --color-terracotta-dark: #bf6645;
+  --color-white: #f8f9fa;
+  --color-text-body: #d1d1d3;
+  --color-text-muted: #8e8e93;
+
+  /* Spacing Grid (8px baseline) */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-48: 48px;
+  --space-64: 64px;
+
+  /* Typography */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-size-h1: 2rem;       /* 32px */
+  --font-size-h2: 1.5rem;     /* 24px */
+  --font-size-h3: 1.25rem;    /* 20px */
+  --font-size-body: 1rem;     /* 16px */
+  --font-size-small: 0.875rem;/* 14px */
+  
+  --line-height-heading: 1.2;
+  --line-height-body: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background-color: var(--color-anthracite);
+  color: var(--color-white);
+  font-family: var(--font-family);
+  font-size: 16px;
+  line-height: var(--line-height-body);
+  
+  /* iOS PWA Optimizations */
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  height: 100%;
+  width: 100%;
+}
+
+/* Typography Hierarchy */
+h1 {
+  font-size: var(--font-size-h1);
+  line-height: var(--line-height-heading);
+  margin-bottom: var(--space-24);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  line-height: var(--line-height-heading);
+  margin-bottom: var(--space-16);
+  font-weight: 500;
+}
+
+p {
+  color: var(--color-text-body);
+  margin-bottom: var(--space-16);
+  max-width: 75ch; /* Constrain reading width */
+}
+
+/* Base interactive elements */
+button {
+  font-family: inherit;
+  font-size: var(--font-size-body);
+  padding: var(--space-8) var(--space-16);
+  border: none;
+  border-radius: 8px;
+  background-color: var(--color-sage);
+  color: var(--color-anthracite);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  min-height: 44px; /* Touch target minimum */
+  min-width: 44px;
+}
+
+button:hover {
+  background-color: var(--color-sage-light);
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+button.primary {
+  background-color: var(--color-terracotta);
+  color: var(--color-white);
+}
+
+button.primary:hover {
+  background-color: var(--color-terracotta-dark);
+}
+
+/* Layout utilities */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-32) var(--space-16);
+}
+
+.card {
+  background-color: var(--color-anthracite-light);
+  border-radius: 16px;
+  padding: var(--space-24);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
