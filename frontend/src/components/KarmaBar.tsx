@@ -2,79 +2,96 @@ import { motion, useSpring, useTransform } from 'framer-motion';
 import { useExpense, useExpenseSplit } from '../module_bindings/hooks';
 import { localIdentity } from '../spacetimedb';
 
-export const KarmaBar = () => {
+interface Props {
+  tripId: string;
+}
+
+export const KarmaBar = ({ tripId }: Props) => {
   const splits = useExpenseSplit();
   const expenses = useExpense();
 
-  // Find local user
-  // (In our simulated environment where we create "Alice" and "Bob", the local user might be Alice if she's the sender. 
-  // For the sake of the exercise, if there are users, we'll pick the local identity. If no local user exists yet in the table, we'll just show 0 or default.)
+  // Scope to the active trip and compute the local user's net balance.
   let netBalance = 0;
-
   if (localIdentity) {
-    splits.forEach(split => {
-      // Find the parent expense
-      const expense = expenses.find(e => e.id === split.expenseId);
-      if (expense) {
+    const tripExpenses = expenses.filter(e => e.tripId === tripId);
+    tripExpenses.forEach(expense => {
+      const expSplits = splits.filter(s => s.expenseId === expense.id);
+      expSplits.forEach(split => {
         if (expense.payerId === localIdentity && split.debtorId !== localIdentity) {
-          // Local user paid for someone else
-          netBalance += split.amountOwed;
+          netBalance += split.amountOwed; // others owe me
         } else if (split.debtorId === localIdentity && expense.payerId !== localIdentity) {
-          // Local user owes someone else
-          netBalance -= split.amountOwed;
+          netBalance -= split.amountOwed; // I owe others
         }
-      }
+      });
     });
   }
 
-  // Define max threshold for the visual bar (e.g. $100)
   const maxThreshold = 100;
-  
-  // Cap between -maxThreshold and +maxThreshold
   const cappedBalance = Math.max(-maxThreshold, Math.min(maxThreshold, netBalance));
-  
-  // Convert to 0% to 100% scale where 50% is 0 balance
   const targetPercentage = 50 + (cappedBalance / maxThreshold) * 50;
 
-  // Spring animation for the percentage
-  const springConfig = { stiffness: 300, damping: 30 };
+  const springConfig = { stiffness: 280, damping: 28 };
   const animatedPercentage = useSpring(50, springConfig);
-
-  // Animate to new target
   animatedPercentage.set(targetPercentage);
 
-  // Transform color based on the value
-  const backgroundColor = useTransform(
+  const barColor = useTransform(
     animatedPercentage,
     [0, 50, 100],
-    ['var(--color-terracotta)', 'var(--color-anthracite)', 'var(--color-sage)']
+    ['#c0715a', '#3a3a3c', '#6fba8a']
   );
 
+  const isPositive = netBalance > 0.005;
+  const isNegative = netBalance < -0.005;
+  const label = isPositive
+    ? `You're owed $${netBalance.toFixed(2)}`
+    : isNegative
+    ? `You owe $${Math.abs(netBalance).toFixed(2)}`
+    : 'All settled up';
+
   return (
-    <div style={{ marginBottom: 'var(--space-24)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-8)' }}>
-        <h3 style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--color-sage)' }}>KARMA BALANCE</h3>
-        <motion.span style={{ fontSize: 'var(--font-size-small)', color: 'var(--color-white)', fontWeight: 'bold' }}>
-          ${netBalance.toFixed(2)}
+    <div style={{ width: '100%' }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <span style={{
+          fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em',
+          textTransform: 'uppercase', color: 'rgba(111,186,138,0.6)',
+        }}>
+          Karma Balance
+        </span>
+        <motion.span
+          key={label}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+          style={{
+            fontSize: '0.82rem', fontWeight: 700,
+            color: isPositive ? '#6fba8a' : isNegative ? '#c0715a' : 'rgba(255,255,255,0.35)',
+          }}
+        >
+          {label}
         </motion.span>
       </div>
-      <div 
-        style={{ 
-          height: '16px', 
-          backgroundColor: 'var(--color-anthracite)', 
-          borderRadius: '8px', 
-          overflow: 'hidden',
-          boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.8)'
-        }}
-      >
-        <motion.div 
-          style={{ 
-            height: '100%', 
-            width: useTransform(animatedPercentage, p => `${p}%`), 
-            backgroundColor,
-            borderRadius: '8px'
-          }} 
-        />
+
+      {/* Track */}
+      <div style={{
+        height: '3px',
+        background: 'rgba(255,255,255,0.06)',
+        borderRadius: '99px',
+        overflow: 'hidden',
+        position: 'relative',
+      }}>
+        {/* Centre marker */}
+        <div style={{
+          position: 'absolute', left: '50%', top: 0, bottom: 0,
+          width: '1px', background: 'rgba(255,255,255,0.12)',
+        }} />
+        <motion.div style={{
+          position: 'absolute',
+          height: '100%',
+          borderRadius: '99px',
+          width: useTransform(animatedPercentage, p => `${p}%`),
+          backgroundColor: barColor,
+        }} />
       </div>
     </div>
   );

@@ -1,301 +1,287 @@
-import { useMemo } from 'react';
-import { motion, useSpring } from 'framer-motion';
+import { useEffect, useRef, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 
-export const LiveDebtConstellation = () => {
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface Star {
+  id: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  opacity: number;
+}
+
+interface Props {
+  /** When null → ambient idle star field. When set → shows real trip debt graph. */
+  activeTripId: string | null;
+}
+
+// ─── Ambient Canvas (idle star drift) ────────────────────────────────────────
+const AmbientCanvas = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const starsRef = useRef<Star[]>([]);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    const W = () => canvas.width = window.innerWidth;
+    const H = () => canvas.height = window.innerHeight;
+    W(); H();
+
+    const onResize = () => { W(); H(); init(); };
+    window.addEventListener('resize', onResize);
+
+    const init = () => {
+      const count = Math.min(Math.floor(window.innerWidth / 18), 60);
+      starsRef.current = Array.from({ length: count }, (_, i) => ({
+        id: String(i),
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.18,
+        vy: (Math.random() - 0.5) * 0.18,
+        r: 1.5 + Math.random() * 2.5,
+        opacity: 0.08 + Math.random() * 0.18,
+      }));
+    };
+    init();
+
+    const LINK_DIST = 160;
+
+    const tick = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const stars = starsRef.current;
+
+      // Draw links
+      for (let i = 0; i < stars.length; i++) {
+        for (let j = i + 1; j < stars.length; j++) {
+          const dx = stars[i].x - stars[j].x;
+          const dy = stars[i].y - stars[j].y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < LINK_DIST) {
+            const alpha = (1 - d / LINK_DIST) * 0.06;
+            ctx.beginPath();
+            ctx.moveTo(stars[i].x, stars[i].y);
+            ctx.lineTo(stars[j].x, stars[j].y);
+            ctx.strokeStyle = `rgba(111,186,138,${alpha})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Draw & update stars
+      for (const s of stars) {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(111,186,138,${s.opacity})`;
+        ctx.fill();
+
+        s.x += s.vx;
+        s.y += s.vy;
+
+        // Wrap edges
+        if (s.x < -s.r) s.x = canvas.width + s.r;
+        else if (s.x > canvas.width + s.r) s.x = -s.r;
+        if (s.y < -s.r) s.y = canvas.height + s.r;
+        else if (s.y > canvas.height + s.r) s.y = -s.r;
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    tick();
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+      }}
+    />
+  );
+};
+
+// ─── Active Trip Graph ────────────────────────────────────────────────────────
+const TripGraph = ({ tripId }: { tripId: string }) => {
   const users = useUser();
   const splits = useExpenseSplit();
   const expenses = useExpense();
 
-  // Build a debt map: owes[debtorId][payerId] = amount
+  // Debt map: owes[debtorId][payerId] = amount
   const owes = useMemo(() => {
     const map: Record<string, Record<string, number>> = {};
-
     users.forEach(u => {
       const uid = typeof u.id === 'object' && 'toHexString' in u.id
-        ? (u.id as any).toHexString()
-        : String(u.id);
+        ? (u.id as any).toHexString() : String(u.id);
       map[uid] = {};
     });
-
     splits.forEach(split => {
-      const expense = expenses.find(e => e.id === split.expenseId);
+      const expense = expenses.find(e => e.id === split.expenseId && e.tripId === tripId);
       if (!expense) return;
-
       const debtorId = split.debtorId;
       const payeeId = expense.payerId;
-
       if (debtorId !== payeeId) {
         if (!map[debtorId]) map[debtorId] = {};
         map[debtorId][payeeId] = (map[debtorId][payeeId] || 0) + split.amountOwed;
       }
     });
-
     return map;
-  }, [users, splits, expenses]);
+  }, [users, splits, expenses, tripId]);
 
-  const radius = 110;
+  // Node layout — evenly distributed on a big ellipse across the screen
   const nodes = useMemo(() => {
-    return users.map((user, index) => {
-      const angle = (index / Math.max(users.length, 1)) * 2 * Math.PI - Math.PI / 2;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    const rx = Math.min(window.innerWidth * 0.3, 260);
+    const ry = Math.min(window.innerHeight * 0.28, 200);
+    return users.map((user, i) => {
+      const angle = (i / Math.max(users.length, 1)) * 2 * Math.PI - Math.PI / 2;
       const uid = typeof user.id === 'object' && 'toHexString' in user.id
-        ? (user.id as any).toHexString()
-        : String(user.id);
+        ? (user.id as any).toHexString() : String(user.id);
       return {
         id: uid,
         name: user.name,
-        baseX: Math.cos(angle) * radius,
-        baseY: Math.sin(angle) * radius,
+        x: cx + Math.cos(angle) * rx,
+        y: cy + Math.sin(angle) * ry,
       };
     });
   }, [users]);
 
-  const springConfig = { stiffness: 260, damping: 28 };
-
-  const isEmpty = users.length === 0;
+  const maxDebt = useMemo(() => {
+    let max = 0;
+    Object.values(owes).forEach(payees =>
+      Object.values(payees).forEach(v => { if (v > max) max = v; })
+    );
+    return max || 1;
+  }, [owes]);
 
   return (
-    <div
-      className="card"
+    <svg
       style={{
-        minHeight: '420px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        border: '1px solid rgba(155, 175, 164, 0.15)',
-        background: 'radial-gradient(ellipse at center, rgba(40,48,44,0.6) 0%, var(--color-anthracite) 100%)',
-        position: 'relative',
-        overflow: 'hidden',
-        padding: 'var(--space-24)',
-        gap: 'var(--space-16)',
+        position: 'fixed',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
       }}
     >
-      <h2 style={{ color: 'var(--color-sage)', fontSize: 'var(--font-size-h3)', zIndex: 10, margin: 0 }}>
-        Live Debt Constellation
-      </h2>
-      <p style={{ textAlign: 'center', opacity: 0.6, maxWidth: '300px', zIndex: 10, margin: 0, fontSize: '0.85rem' }}>
-        Dynamics are simulated using real-time debt pulls.
-      </p>
+      {/* Debt lines */}
+      {nodes.map(nodeA =>
+        nodes.map(nodeB => {
+          if (nodeA.id === nodeB.id) return null;
+          const amount = owes[nodeA.id]?.[nodeB.id] || 0;
+          if (amount <= 0) return null;
+          const intensity = amount / maxDebt;
+          return (
+            <motion.line
+              key={`${nodeA.id}-${nodeB.id}`}
+              x1={nodeA.x} y1={nodeA.y}
+              x2={nodeB.x} y2={nodeB.y}
+              stroke={`rgba(192,113,90,${0.2 + intensity * 0.55})`}
+              strokeWidth={0.8 + intensity * 3.5}
+              strokeDasharray="5 6"
+              initial={{ opacity: 0, pathLength: 0 }}
+              animate={{ opacity: 1, pathLength: 1 }}
+              transition={{ duration: 0.9, ease: [0.23, 1, 0.32, 1] }}
+            />
+          );
+        })
+      )}
 
-      {isEmpty && (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 'var(--space-8)',
-            marginTop: 'var(--space-32)',
-            opacity: 0.45,
-          }}
+      {/* Nodes */}
+      {nodes.map((node, i) => (
+        <motion.g
+          key={node.id}
+          initial={{ opacity: 0, scale: 0 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: i * 0.07, duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+          style={{ transformOrigin: `${node.x}px ${node.y}px` }}
         >
-          {/* Placeholder dots */}
-          <div style={{ display: 'flex', gap: '16px' }}>
-            {[0, 1, 2].map(i => (
-              <div
-                key={i}
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: '50%',
-                  background: 'rgba(111, 186, 138, 0.2)',
-                  border: '1px dashed rgba(111, 186, 138, 0.4)',
-                }}
-              />
-            ))}
-          </div>
-          <span style={{ color: '#666', fontSize: '0.85rem' }}>Awaiting Data…</span>
-          <span style={{ color: '#555', fontSize: '0.75rem' }}>Press "Create Test Users" to begin</span>
-        </div>
-      )}
-
-      {/* Constellation canvas */}
-      {!isEmpty && (
-        <div style={{ position: 'relative', width: '320px', height: '280px', margin: '0 auto' }}>
-          <svg
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              overflow: 'visible',
-            }}
+          {/* Glow ring */}
+          <circle
+            cx={node.x} cy={node.y} r={28}
+            fill="rgba(111,186,138,0.05)"
+            stroke="rgba(111,186,138,0.15)"
+            strokeWidth={1}
+          />
+          {/* Core dot */}
+          <circle
+            cx={node.x} cy={node.y} r={16}
+            fill="rgba(10,10,10,0.85)"
+            stroke="rgba(111,186,138,0.5)"
+            strokeWidth={1.5}
+          />
+          {/* Initials */}
+          <text
+            x={node.x} y={node.y}
+            textAnchor="middle" dominantBaseline="central"
+            fill="#6fba8a"
+            fontSize="10"
+            fontWeight="700"
+            fontFamily="Inter, -apple-system, sans-serif"
+            letterSpacing="0.04em"
           >
-            <g transform="translate(160, 140)">
-              {nodes.map(nodeA =>
-                nodes.map(nodeB => {
-                  if (nodeA.id === nodeB.id) return null;
-                  const amountOwed = owes[nodeA.id]?.[nodeB.id] || 0;
-                  if (amountOwed <= 0) return null;
-
-                  const pullFactor = Math.min(amountOwed * 1.5, radius * 0.8);
-                  const dx = nodeB.baseX - nodeA.baseX;
-                  const dy = nodeB.baseY - nodeA.baseY;
-                  const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-                  const targetAx = nodeA.baseX + (dx / distance) * pullFactor;
-                  const targetAy = nodeA.baseY + (dy / distance) * pullFactor;
-
-                  return (
-                    <motion.line
-                      key={`${nodeA.id}-${nodeB.id}`}
-                      x1={targetAx}
-                      y1={targetAy}
-                      x2={nodeB.baseX}
-                      y2={nodeB.baseY}
-                      stroke="#c0715a"
-                      strokeWidth={Math.min(amountOwed / 10, 5) + 1}
-                      strokeDasharray="5 4"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 0.65 }}
-                      transition={{ duration: 0.6 }}
-                    />
-                  );
-                })
-              )}
-            </g>
-          </svg>
-
-          {nodes.map(node => {
-            let targetX = node.baseX;
-            let targetY = node.baseY;
-            const debts = owes[node.id] || {};
-            for (const payeeId in debts) {
-              const amountOwed = debts[payeeId];
-              const payeeNode = nodes.find(n => n.id === payeeId);
-              if (payeeNode && amountOwed > 0) {
-                const dx = payeeNode.baseX - node.baseX;
-                const dy = payeeNode.baseY - node.baseY;
-                const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-                const pull = Math.min(amountOwed * 1.5, radius * 0.8);
-                targetX += (dx / distance) * pull;
-                targetY += (dy / distance) * pull;
-              }
-            }
-            return (
-              <ConstellationNode
-                key={node.id}
-                name={node.name}
-                targetX={targetX + 160}
-                targetY={targetY + 140}
-                springConfig={springConfig}
-              />
-            );
-          })}
-        </div>
-      )}
-
-      {/* Expense list */}
-      {expenses.length > 0 && (
-        <div
-          style={{
-            width: '100%',
-            maxWidth: '480px',
-            marginTop: 'var(--space-16)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-8)',
-          }}
-        >
-          <h3
-            style={{
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              color: 'var(--color-sage)',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              margin: 0,
-            }}
+            {node.name.substring(0, 2).toUpperCase()}
+          </text>
+          {/* Name label below */}
+          <text
+            x={node.x} y={node.y + 32}
+            textAnchor="middle"
+            fill="rgba(255,255,255,0.45)"
+            fontSize="9"
+            fontWeight="500"
+            fontFamily="Inter, -apple-system, sans-serif"
           >
-            Expenses
-          </h3>
-          {expenses.map(expense => {
-            const expSplits = splits.filter(s => s.expenseId === expense.id);
-            return (
-              <motion.div
-                key={expense.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: '10px',
-                  padding: '12px 16px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  gap: '12px',
-                }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{expense.description}</span>
-                  <span style={{ color: '#666', fontSize: '0.75rem' }}>
-                    Trip: {expense.tripId} · Splits: {expSplits.length}
-                  </span>
-                </div>
-                <span
-                  style={{
-                    fontWeight: 700,
-                    fontSize: '1rem',
-                    color: '#6fba8a',
-                    flexShrink: 0,
-                  }}
-                >
-                  ${expense.amount.toFixed(2)}
-                </span>
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+            {node.name}
+          </text>
+        </motion.g>
+      ))}
+    </svg>
   );
 };
 
-const ConstellationNode = ({
-  name,
-  targetX,
-  targetY,
-  springConfig,
-}: {
-  name: string;
-  targetX: number;
-  targetY: number;
-  springConfig: any;
-}) => {
-  const x = useSpring(targetX, springConfig);
-  const y = useSpring(targetY, springConfig);
-
-  x.set(targetX);
-  y.set(targetY);
-
+// ─── Public Component ─────────────────────────────────────────────────────────
+export const LiveDebtConstellation = ({ activeTripId }: Props) => {
   return (
-    <motion.div
+    <div
       style={{
-        position: 'absolute',
-        x,
-        y,
-        width: '44px',
-        height: '44px',
-        marginLeft: '-22px',
-        marginTop: '-22px',
-        borderRadius: '50%',
-        backgroundColor: 'var(--color-sage)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--color-anthracite)',
-        fontWeight: 700,
-        fontSize: '0.75rem',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-        cursor: 'pointer',
-        zIndex: 20,
-        letterSpacing: '0.02em',
+        position: 'fixed',
+        inset: 0,
+        zIndex: 0,
+        pointerEvents: 'none',
+        overflow: 'hidden',
       }}
-      whileHover={{ scale: 1.12 }}
-      whileTap={{ scale: 0.94 }}
-      title={name}
     >
-      {name.substring(0, 2).toUpperCase()}
-    </motion.div>
+      {/* Ambient idle field — always visible, fades when trip is active */}
+      <motion.div
+        animate={{ opacity: activeTripId ? 0.35 : 1 }}
+        transition={{ duration: 0.8 }}
+        style={{ position: 'absolute', inset: 0 }}
+      >
+        <AmbientCanvas />
+      </motion.div>
+
+      {/* Trip graph — fades in when a trip is selected */}
+      <motion.div
+        animate={{ opacity: activeTripId ? 1 : 0 }}
+        transition={{ duration: 0.8 }}
+        style={{ position: 'absolute', inset: 0 }}
+      >
+        {activeTripId && <TripGraph tripId={activeTripId} />}
+      </motion.div>
+    </div>
   );
 };
