@@ -45,8 +45,9 @@ function App() {
   const handleCreateTestUsers = () => {
     if (!conn) return;
     // Alice and Bob
-    conn.reducers.createUser({ name: 'Alice' });
-    conn.reducers.createUser({ name: 'Bob' });
+    conn.reducers.createUser("Alice");
+    conn.reducers.createUser("Bob");
+    conn.reducers.createTrip("test-trip-1", "Vegas 2026");
   };
 
   const handleSimulateExpense = () => {
@@ -56,26 +57,27 @@ function App() {
     const alice = users.find(u => u.name === 'Alice');
     const bob = users.find(u => u.name === 'Bob');
     
-    if (!alice || !bob) {
-      alert("Please create test users first!");
+    if (users.length < 2 || !alice || !bob) {
+      alert("Please create users first");
       return;
     }
 
-    const amount = Math.floor(Math.random() * 41) + 10; // $10 - $50
-    const half = amount / 2;
+    const expenseId = crypto.randomUUID();
+    const amount = 100;
+    const half = 50;
 
     const splits = [
       { debtor_id: alice.id.toHexString(), amount_owed: half },
       { debtor_id: bob.id.toHexString(), amount_owed: half }
     ];
 
-    conn.reducers.addExpense({
-      expenseId: `exp_${Date.now()}`,
-      tripId: 'default_trip',
+    conn.reducers.addExpense(
+      expenseId,
+      "test-trip-1",
       amount,
-      description: 'Random Expense',
-      splits: JSON.stringify(splits) // We defined splits as a JSON string in the backend
-    });
+      "Dinner",
+      JSON.stringify(splits)
+    );
   };
 
   return (
