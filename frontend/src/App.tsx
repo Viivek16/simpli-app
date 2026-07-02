@@ -5,9 +5,6 @@ import {
   onSpacetimeConnectError,
   onSpacetimeDisconnect,
 } from './spacetimedb';
-// We import the module namespace so we can always read the LATEST conn value
-// (it's a mutable `export let`, so re-reading it after connection is established
-// gives us the actual DbConnection instance).
 import * as SpacetimeDB from './spacetimedb';
 import { LiveDebtConstellation } from './components/LiveDebtConstellation';
 import { KarmaBar } from './components/KarmaBar';
@@ -28,12 +25,13 @@ function App() {
       setIsReady(true);
       setUiError(null);
 
-      // SpacetimeDB.conn is now the live DbConnection instance
       const activeConn = SpacetimeDB.conn;
       if (activeConn) {
         activeConn
           .subscriptionBuilder()
-          .onApplied(() => {})
+          .onApplied(() => {
+            console.log('[SIMPLI] ✅ Subscription applied — local cache is live.');
+          })
           .subscribe([
             'SELECT * FROM user',
             'SELECT * FROM expense_split',
@@ -66,29 +64,28 @@ function App() {
     setUiError(null);
     setStatusMsg(null);
 
-    // Always read SpacetimeDB.conn at call-time so we get the latest value.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const activeConn = SpacetimeDB.conn as any;
 
     if (!activeConn) {
-      setUiError('No active database connection. Please wait and try again.');
+      setUiError('Not connected. Please wait.');
       return;
     }
 
     try {
-      console.log('[SIMPLI] → createUser(Alice)');
+      // create_user uses ctx.sender as the user ID — so we just pass the name.
+      // "Alice" and "Bob" will be created with this session's identity and a 2nd identity
+      // (in a multi-user flow). For the single-user demo we create one user with this identity.
+      console.log('[SIMPLI] → createUser("Alice")');
       activeConn.reducers.createUser({ name: 'Alice' });
 
-      console.log('[SIMPLI] → createUser(Bob)');
-      activeConn.reducers.createUser({ name: 'Bob' });
-
-      console.log('[SIMPLI] → createTrip(trip-1, "Vegas Trip")');
+      // Create a test trip
+      console.log('[SIMPLI] → createTrip("trip-1", "Vegas Trip")');
       activeConn.reducers.createTrip({ tripId: 'trip-1', name: 'Vegas Trip' });
 
-      setStatusMsg('✓ Dispatched: Create Alice, Bob & Vegas Trip');
+      setStatusMsg('✓ Created user & trip — constellation will populate when data arrives');
     } catch (error: any) {
       console.error('[SIMPLI] handleCreateTestUsers error:', error);
-      setUiError(error?.message ?? 'Unknown error creating test users.');
+      setUiError(error?.message ?? 'Error creating test users.');
     }
   };
 
@@ -96,33 +93,40 @@ function App() {
     setUiError(null);
     setStatusMsg(null);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const activeConn = SpacetimeDB.conn as any;
+    const myIdentity = SpacetimeDB.localIdentity;
 
     if (!activeConn) {
-      setUiError('No active database connection. Please wait and try again.');
+      setUiError('Not connected. Please wait.');
+      return;
+    }
+
+    if (!myIdentity) {
+      setUiError('Identity not yet established. Wait a moment and try again.');
       return;
     }
 
     try {
-      const splits = JSON.stringify([
-        { debtor_id: 'alice-1', amount_owed: 50 },
-        { debtor_id: 'bob-1', amount_owed: 50 },
-      ]);
-
+      // The server's add_expense reducer accepts splits as Split[] — a BSATN array.
+      // The generated binding has splits: __t.string() which means the SDK
+      // will serialize this as a string field. We pass JSON so the server
+      // can decode it. The server Split struct has debtor_id & amount_owed.
+      // We reference the current user's own identity as both payer & debtor
+      // for the single-user demo (just to populate the DB and show the UI working).
       console.log('[SIMPLI] → addExpense(exp-1, trip-1, 100, "Dinner")');
       activeConn.reducers.addExpense({
         expenseId: 'exp-1',
         tripId: 'trip-1',
         amount: 100,
         description: 'Dinner',
-        splits,
+        // splits is encoded as a JSON string because the generated binding treats it as string
+        splits: JSON.stringify([{ debtor_id: myIdentity, amount_owed: 100 }]),
       });
 
-      setStatusMsg('✓ Dispatched: Add Expense $100 (Dinner)');
+      setStatusMsg('✓ Expense added — check constellation for debt lines');
     } catch (error: any) {
       console.error('[SIMPLI] handleSimulateExpense error:', error);
-      setUiError(error?.message ?? 'Unknown error simulating expense.');
+      setUiError(error?.message ?? 'Error adding expense.');
     }
   };
 
@@ -133,7 +137,6 @@ function App() {
 
   return (
     <div className="container" style={{ paddingBottom: '108px' }}>
-      {/* ── Header ── */}
       <header style={{ marginBottom: 'var(--space-48)' }}>
         <h1>SIMPLI</h1>
         <p style={{ fontSize: 'var(--font-size-h3)', color: 'var(--color-sage)' }}>
@@ -141,10 +144,8 @@ function App() {
         </p>
       </header>
 
-      {/* ── Main ── */}
       <main>
         <section style={{ marginBottom: 'var(--space-48)' }}>
-          {/* Connection status */}
           <div
             className="card"
             style={{
@@ -202,66 +203,29 @@ function App() {
           zIndex: 100,
         }}
       >
-        {/* Error banner */}
         {uiError && (
-          <p
-            style={{
-              margin: 0,
-              color: '#e07070',
-              fontWeight: 600,
-              fontSize: '0.85rem',
-              textAlign: 'center',
-            }}
-          >
+          <p style={{ margin: 0, color: '#e07070', fontWeight: 600, fontSize: '0.85rem', textAlign: 'center' }}>
             ⚠ {uiError}
           </p>
         )}
-
-        {/* Success feedback */}
         {statusMsg && !uiError && (
-          <p
-            style={{
-              margin: 0,
-              color: '#6fba8a',
-              fontWeight: 500,
-              fontSize: '0.85rem',
-              textAlign: 'center',
-            }}
-          >
+          <p style={{ margin: 0, color: '#6fba8a', fontWeight: 500, fontSize: '0.85rem', textAlign: 'center' }}>
             {statusMsg}
           </p>
         )}
 
-        {/* Action buttons */}
         <div style={{ display: 'flex', gap: 'var(--space-16)' }}>
-          <button
-            onClick={handleCreateTestUsers}
-            disabled={!isReady}
-            title={!isReady ? 'Waiting for database connection…' : 'Create Alice, Bob & a test trip'}
-          >
+          <button onClick={handleCreateTestUsers} disabled={!isReady}>
             Create Test Users
           </button>
-          <button
-            className="primary"
-            onClick={handleSimulateExpense}
-            disabled={!isReady}
-            title={!isReady ? 'Waiting for database connection…' : 'Add a $100 dinner expense'}
-          >
+          <button className="primary" onClick={handleSimulateExpense} disabled={!isReady}>
             Simulate Expense
           </button>
         </div>
 
-        {/* Not-ready hint */}
         {!isReady && (
-          <p
-            style={{
-              margin: 0,
-              color: '#666',
-              fontSize: '0.75rem',
-              textAlign: 'center',
-            }}
-          >
-            {connectionError ? 'Connection failed — check console for details.' : 'Establishing secure connection…'}
+          <p style={{ margin: 0, color: '#666', fontSize: '0.75rem', textAlign: 'center' }}>
+            {connectionError ? 'Connection failed — check console.' : 'Establishing secure connection…'}
           </p>
         )}
       </div>
