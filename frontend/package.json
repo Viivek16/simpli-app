@@ -15,7 +15,6 @@
     "@react-three/fiber": "^9.6.1",
     "@types/three": "^0.185.0",
     "framer-motion": "^12.42.2",
-    "framer-motion-3d": "^12.4.13",
     "jwt-decode": "^4.0.0",
     "lucide-react": "^1.23.0",
     "react": "^19.2.7",
