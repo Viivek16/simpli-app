@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { initSpacetimeDB } from './spacetimedb';
 import * as SpacetimeDB from './spacetimedb';
 import { useExpense, useExpenseSplit } from './module_bindings/hooks';
+import type { Trip } from './hooks/useTrips';
 import { KarmaBar } from './components/KarmaBar';
 import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground } from './components/GalaxyBackground';
@@ -12,70 +13,6 @@ import { GalaxyBackground } from './components/GalaxyBackground';
 const EO = [0.23, 1, 0.32, 1] as const;
 
 interface GoogleProfile { name: string; email: string; picture: string; sub: string; }
-export interface Trip { id: string; name: string; }
-
-// ─── Hooks ────────────────────────────────────────────────────────────────────
-export function useTrip(): Trip[] {
-  const [trips, setTrips] = useState<Trip[]>([]);
-  useEffect(() => {
-    const sub = () => {
-      const c = SpacetimeDB.conn as any;
-      if (!c) return false;
-      const load = () => {
-        try {
-          const allTrips = [...c.db.trip.iter()];
-          const memberTripIds = new Set([...c.db.trip_member.iter()].filter((m: any) => m.userId === SpacetimeDB.localIdentity || m.user_id === SpacetimeDB.localIdentity).map((m: any) => m.tripId || m.trip_id));
-          setTrips(allTrips.filter(t => memberTripIds.has(t.id)).map((r: any) => ({ id: r.id, name: r.name })));
-        }
-        catch { setTrips([]); }
-      };
-      try {
-        c.db.trip.onInsert(load); c.db.trip.onUpdate(load); c.db.trip.onDelete(load);
-        if (c.db.trip_member) { c.db.trip_member.onInsert(load); c.db.trip_member.onUpdate(load); c.db.trip_member.onDelete(load); }
-        load();
-        return () => {
-          c.db.trip.removeOnInsert(load); c.db.trip.removeOnUpdate(load); c.db.trip.removeOnDelete(load);
-          if (c.db.trip_member) { c.db.trip_member.removeOnInsert(load); c.db.trip_member.removeOnUpdate(load); c.db.trip_member.removeOnDelete(load); }
-        };
-      } catch { return false; }
-    };
-    const cleanup = sub(); if (cleanup) return cleanup;
-    let inner: (() => void) | undefined;
-    const u = SpacetimeDB.onSpacetimeConnect(() => { inner = sub() || undefined; });
-    return () => { u(); inner?.(); };
-  }, []);
-  return trips;
-}
-
-export function useTripMember(tripId: string): string[] {
-  const [members, setMembers] = useState<string[]>([]);
-  useEffect(() => {
-    const sub = () => {
-      const c = SpacetimeDB.conn as any;
-      if (!c) return false;
-      const load = () => {
-        try { 
-          const iter = c.db.tripMember ? c.db.tripMember.iter() : c.db.trip_member.iter();
-          const tripMembers = [...iter].filter((r: any) => r.tripId === tripId || r.trip_id === tripId).map((r: any) => r.userId || r.user_id);
-          setMembers([...new Set(tripMembers)] as string[]); // Ensure uniqueness!
-        }
-        catch { setMembers([]); }
-      };
-      try {
-        const table = c.db.tripMember || c.db.trip_member;
-        if (!table) return false;
-        table.onInsert(load); table.onUpdate(load); table.onDelete(load);
-        load();
-        return () => { table.removeOnInsert(load); table.removeOnUpdate(load); table.removeOnDelete(load); };
-      } catch { return false; }
-    };
-    const cleanup = sub(); if (cleanup) return cleanup;
-    let inner: (() => void) | undefined;
-    const u = SpacetimeDB.onSpacetimeConnect(() => { inner = sub() || undefined; });
-    return () => { u(); inner?.(); };
-  }, [tripId]);
-  return members;
-}
 
 function useIsConnected() {
   const [v, setV] = useState(!!SpacetimeDB.conn);
@@ -537,32 +474,13 @@ function App() {
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const isConnected = useIsConnected();
 
-const ENABLE_DEMO_SEED = true;
-
   // Initialize SpacetimeDB globally exactly once
   useEffect(() => {
     initSpacetimeDB();
     const u1 = SpacetimeDB.onSpacetimeConnect(() => {
       const c = SpacetimeDB.conn as any;
       if (c) {
-        c.subscriptionBuilder().onApplied(() => {
-          if (ENABLE_DEMO_SEED && SpacetimeDB.localIdentity) {
-            const hasTrips = [...c.db.trip_member.iter()].some((m: any) => m.userId === SpacetimeDB.localIdentity || m.user_id === SpacetimeDB.localIdentity);
-            const seeded = localStorage.getItem('simpli_demo_seeded');
-            if (!hasTrips && !seeded) {
-              localStorage.setItem('simpli_demo_seeded', 'true');
-              const demoTripId = `demo-${Date.now()}`;
-              try {
-                c.reducers.createTrip({ tripId: demoTripId, name: "Goa Trip 🌊" });
-                setTimeout(() => {
-                  c.reducers.seedDemo({ tripId: demoTripId });
-                }, 1000); // Small delay to let createTrip sync
-              } catch (e) {
-                console.error('Demo seed failed', e);
-              }
-            }
-          }
-        }).subscribe([
+        c.subscriptionBuilder().onApplied(() => {}).subscribe([
           'SELECT * FROM user', 'SELECT * FROM trip',
           'SELECT * FROM expense', 'SELECT * FROM expense_split',
           'SELECT * FROM trip_member',
