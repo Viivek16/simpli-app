@@ -37,6 +37,8 @@ import {
 import AddExpenseReducer from "./add_expense_reducer";
 import CreateTripReducer from "./create_trip_reducer";
 import CreateUserReducer from "./create_user_reducer";
+import JoinTripReducer from "./join_trip_reducer";
+import SeedDemoReducer from "./seed_demo_reducer";
 import SettleDebtReducer from "./settle_debt_reducer";
 
 // Import all procedure arg schemas
@@ -45,6 +47,7 @@ import SettleDebtReducer from "./settle_debt_reducer";
 import ExpenseRow from "./expense_table";
 import ExpenseSplitRow from "./expense_split_table";
 import TripRow from "./trip_table";
+import TripMemberRow from "./trip_member_table";
 import UserRow from "./user_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -89,6 +92,19 @@ const tablesSchema = __schema({
       { name: 'trip_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, TripRow),
+  trip_member: __table({
+    name: 'trip_member',
+    indexes: [
+      { accessor: 'trip_id', name: 'trip_member_trip_id_idx_btree', algorithm: 'btree', columns: [
+        'tripId',
+      ] },
+      { accessor: 'user_id', name: 'trip_member_user_id_idx_btree', algorithm: 'btree', columns: [
+        'userId',
+      ] },
+    ],
+    constraints: [
+    ],
+  }, TripMemberRow),
   user: __table({
     name: 'user',
     indexes: [
@@ -107,6 +123,8 @@ const reducersSchema = __reducers(
   __reducerSchema("add_expense", AddExpenseReducer),
   __reducerSchema("create_trip", CreateTripReducer),
   __reducerSchema("create_user", CreateUserReducer),
+  __reducerSchema("join_trip", JoinTripReducer),
+  __reducerSchema("seed_demo", SeedDemoReducer),
   __reducerSchema("settle_debt", SettleDebtReducer),
 );
 

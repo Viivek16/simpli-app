@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Points, PointMaterial, OrbitControls, Html } from '@react-three/drei';
-import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing';
+import { BlendFunction } from 'postprocessing';
 import * as THREE from 'three';
 import { LiveDebtConstellation } from './LiveDebtConstellation';
 import { useTrip } from '../App';
@@ -9,7 +10,7 @@ import type { Trip } from '../App';
 
 const PARTICLE_COUNT = 2500; // reduced per galaxy to maintain performance with multiple galaxies
 
-const SwirlingGalaxy = ({ position, colorCoreStr, colorEdgeStr, onClick, name }: { position: THREE.Vector3, colorCoreStr: string, colorEdgeStr: string, onClick?: () => void, name?: string }) => {
+const SwirlingGalaxy = ({ position, colorCoreStr, colorEdgeStr, onClick, name, isMicroView }: { position: THREE.Vector3, colorCoreStr: string, colorEdgeStr: string, onClick?: () => void, name?: string, isMicroView?: boolean }) => {
   const ref = useRef<THREE.Points>(null);
   const [hovered, setHovered] = useState(false);
 
@@ -69,10 +70,10 @@ const SwirlingGalaxy = ({ position, colorCoreStr, colorEdgeStr, onClick, name }:
         <PointMaterial 
           transparent 
           vertexColors 
-          size={hovered ? 0.2 : 0.12} 
+          size={isMicroView ? 0.05 : (hovered ? 0.2 : 0.12)} 
           sizeAttenuation={true} 
           depthWrite={false} 
-          opacity={0.8} 
+          opacity={isMicroView ? 0.35 : 0.8} 
           blending={THREE.AdditiveBlending} 
           toneMapped={false}
         />
@@ -100,18 +101,29 @@ const SwirlingGalaxy = ({ position, colorCoreStr, colorEdgeStr, onClick, name }:
 
 const CameraAnimator = ({ activeTripId }: { activeTripId: string | null }) => {
   useFrame((state, delta) => {
+    const controls = state.controls as any;
     if (activeTripId) {
       // Zoom in to Micro View
       state.camera.position.z = THREE.MathUtils.damp(state.camera.position.z, 8, 4, delta);
       state.camera.position.y = THREE.MathUtils.damp(state.camera.position.y, 4, 4, delta);
       state.camera.position.x = THREE.MathUtils.damp(state.camera.position.x, 0, 4, delta);
+      if (controls && controls.target) {
+        controls.target.x = THREE.MathUtils.damp(controls.target.x, 0, 4, delta);
+        controls.target.y = THREE.MathUtils.damp(controls.target.y, 0, 4, delta);
+        controls.target.z = THREE.MathUtils.damp(controls.target.z, 0, 4, delta);
+      }
     } else {
       // Zoom out to Macro View
       state.camera.position.z = THREE.MathUtils.damp(state.camera.position.z, 40, 4, delta);
       state.camera.position.y = THREE.MathUtils.damp(state.camera.position.y, 20, 4, delta);
       state.camera.position.x = THREE.MathUtils.damp(state.camera.position.x, 0, 4, delta);
+      if (controls && controls.target) {
+        controls.target.x = THREE.MathUtils.damp(controls.target.x, 0, 4, delta);
+        controls.target.y = THREE.MathUtils.damp(controls.target.y, 0, 4, delta);
+        controls.target.z = THREE.MathUtils.damp(controls.target.z, 0, 4, delta);
+      }
     }
-    state.camera.lookAt(0, 0, 0);
+    // Do not call lookAt when OrbitControls is active, it causes fighting
   });
 
   return null;
@@ -139,16 +151,17 @@ export const GalaxyBackground = ({ activeTripId, onSelectTrip }: Props) => {
       <Canvas camera={{ position: [0, 20, 40], fov: 60 }}>
         <fog attach="fog" args={['#02050a', 10, 80]} />
         
-        <OrbitControls enablePan={true} enableRotate={true} enableZoom={true} makeDefault />
+        <OrbitControls enablePan={true} enableRotate={true} enableZoom={true} makeDefault autoRotate autoRotateSpeed={0.5} />
 
         <CameraAnimator activeTripId={activeTripId} />
 
         {activeTripId ? (
           // MICRO VIEW: Render only the active trip's galaxy at the center
           <SwirlingGalaxy 
-            position={new THREE.Vector3(0, 0, 0)} 
+            position={new THREE.Vector3(0, -3, -10)} 
             colorCoreStr="#b14bf4" 
-            colorEdgeStr="#0a192f" 
+            colorEdgeStr="#0a192f"
+            isMicroView={true}
           />
         ) : (
           // MACRO VIEW: Render all trips as distinct galaxies
@@ -186,7 +199,9 @@ export const GalaxyBackground = ({ activeTripId, onSelectTrip }: Props) => {
         {activeTripId && <LiveDebtConstellation activeTripId={activeTripId} />}
 
         <EffectComposer>
-          <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} height={300} intensity={1.5} />
+          <Bloom luminanceThreshold={0.7} mipmapBlur luminanceSmoothing={0.9} intensity={1.1} />
+          <ChromaticAberration blendFunction={BlendFunction.NORMAL} offset={new THREE.Vector2(0.0005, 0.0005)} radialModulation={false} modulationOffset={0} />
+          <Vignette eskil={false} offset={0.1} darkness={1.1} />
         </EffectComposer>
       </Canvas>
     </div>

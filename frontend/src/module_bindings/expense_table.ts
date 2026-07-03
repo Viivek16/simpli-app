@@ -16,5 +16,5 @@ export default __t.row({
   payerId: __t.string().name("payer_id"),
   amount: __t.f64(),
   description: __t.string(),
-  timestamp: __t.u64(),
+  timestamp: __t.timestamp(),
 });

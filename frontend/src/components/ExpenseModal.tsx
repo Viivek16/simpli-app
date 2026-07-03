@@ -62,31 +62,39 @@ export const ExpenseModal = ({ tripId, tripName, onClose }: Props) => {
     
     const amount = parseFloat(amt);
     if (!desc.trim() || isNaN(amount) || amount <= 0) {
-      const msg = 'Enter a valid description and amount.';
-      setErr(msg);
-      alert(msg);
+      setErr('Enter a valid description and amount.');
       return;
     }
     
     setLoading(true);
     try {
-      const identity = SpacetimeDB.localIdentity ?? 'unknown';
       const isPersonal = expenseType === 'personal';
+      const memberIds = [...(c.db.trip_member || c.db.tripMember).iter()]
+        .filter((m: any) => (m.tripId || m.trip_id) === tripId)
+        .map((m: any) => m.userId || m.user_id);
       
-      c.reducers.addExpense({
+      const per = memberIds.length ? amount / memberIds.length : amount;
+      const splitsArr = isPersonal
+        ? []
+        : memberIds.map((uid: string) => ({ debtor_id: uid, amount_owed: per }));
+      
+      if (!isPersonal && splitsArr.length) {
+        const drift = amount - splitsArr.reduce((s: number, x: any) => s + x.amount_owed, 0);
+        splitsArr[0].amount_owed += drift;
+      }
+      
+      await c.reducers.addExpense({
         expenseId: `exp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        tripId, 
+        tripId,
         amount,
         description: desc.trim(),
-        is_personal: isPersonal,
-        splits: isPersonal ? [] : [{ debtor_id: identity, amount_owed: amount }],
+        splits: JSON.stringify(splitsArr),
       });
       onClose();
     } catch (e: any) {
       const msg = e?.message || 'Failed to add expense';
       console.error('add_expense failed:', e);
       setErr(msg);
-      alert(msg);
     } finally { 
       setLoading(false); 
     }

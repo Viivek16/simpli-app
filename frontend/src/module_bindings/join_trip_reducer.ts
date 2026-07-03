@@ -10,8 +10,6 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  expenseId: __t.string().name("expense_id"),
-  debtorId: __t.string().name("debtor_id"),
-  amountOwed: __t.f64().name("amount_owed"),
-});
+export default {
+  tripId: __t.string(),
+};

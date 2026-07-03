@@ -13,7 +13,7 @@ const spacetimedb = schema({
     {
       id: t.string().primaryKey(),
       name: t.string(),
-      created_at: t.u64(),
+      created_at: t.timestamp(),
     }
   ),
   expense: table(
@@ -24,7 +24,7 @@ const spacetimedb = schema({
       payer_id: t.string(),
       amount: t.f64(),
       description: t.string(),
-      timestamp: t.u64(),
+      timestamp: t.timestamp(),
     }
   ),
   expense_split: table(
@@ -33,6 +33,13 @@ const spacetimedb = schema({
       expense_id: t.string().index(),
       debtor_id: t.string().index(),
       amount_owed: t.f64(),
+    }
+  ),
+  trip_member: table(
+    { public: true },
+    {
+      trip_id: t.string().index(),
+      user_id: t.string().index(),
     }
   ),
 });
@@ -52,7 +59,18 @@ export const createUser = spacetimedb.reducer(
 export const createTrip = spacetimedb.reducer(
   { trip_id: t.string(), name: t.string() },
   (ctx, { trip_id, name }) => {
-    ctx.db.trip.insert({ id: trip_id, name, created_at: BigInt(ctx.timestamp.toString()) });
+    ctx.db.trip.insert({ id: trip_id, name, created_at: ctx.timestamp });
+    ctx.db.trip_member.insert({ trip_id, user_id: ctx.sender.toHexString() });
+  }
+);
+
+export const joinTrip = spacetimedb.reducer(
+  { trip_id: t.string() },
+  (ctx, { trip_id }) => {
+    for (const m of ctx.db.trip_member.trip_id.filter(trip_id)) {
+      if (m.user_id === ctx.sender.toHexString()) return;
+    }
+    ctx.db.trip_member.insert({ trip_id, user_id: ctx.sender.toHexString() });
   }
 );
 
@@ -71,7 +89,7 @@ export const addExpense = spacetimedb.reducer(
       sum += split.amount_owed;
     }
 
-    if (Math.abs(sum - amount) > 0.0001) {
+    if (parsedSplits.length > 0 && Math.abs(sum - amount) > 0.0001) {
       throw new Error("Splits amount_owed must sum up to the total amount");
     }
 
@@ -81,15 +99,17 @@ export const addExpense = spacetimedb.reducer(
       payer_id: ctx.sender.toHexString(),
       amount,
       description,
-      timestamp: BigInt(ctx.timestamp.toString())
+      timestamp: ctx.timestamp
     });
 
-    for (const split of parsedSplits) {
-      ctx.db.expense_split.insert({
-        expense_id,
-        debtor_id: split.debtor_id,
-        amount_owed: split.amount_owed
-      });
+    if (parsedSplits.length > 0) {
+      for (const split of parsedSplits) {
+        ctx.db.expense_split.insert({
+          expense_id,
+          debtor_id: split.debtor_id,
+          amount_owed: split.amount_owed
+        });
+      }
     }
   }
 );
@@ -105,7 +125,7 @@ export const settleDebt = spacetimedb.reducer(
       payer_id: debtor_id,
       amount,
       description: "Debt settlement",
-      timestamp: BigInt(ctx.timestamp.toString())
+      timestamp: ctx.timestamp
     });
 
     ctx.db.expense_split.insert({
@@ -113,5 +133,47 @@ export const settleDebt = spacetimedb.reducer(
       debtor_id: payee_id,
       amount_owed: amount
     });
+  }
+);
+
+export const seedDemo = spacetimedb.reducer(
+  { trip_id: t.string() },
+  (ctx, { trip_id }) => {
+    const demoUsers = [
+      { id: "0000000000000000000000000000000000000000000000000000000000000001", name: "Neeraj" },
+      { id: "0000000000000000000000000000000000000000000000000000000000000002", name: "Paji" },
+      { id: "0000000000000000000000000000000000000000000000000000000000000003", name: "Aisha" }
+    ];
+
+    for (const u of demoUsers) {
+      if (!ctx.db.user.id.find(u.id as any)) {
+        ctx.db.user.insert({ id: u.id as any, name: u.name });
+      }
+      ctx.db.trip_member.insert({ trip_id, user_id: u.id });
+    }
+
+    const localIdentity = ctx.sender.toHexString();
+
+    const exp1 = `exp-demo-1`;
+    ctx.db.expense.insert({ id: exp1, trip_id, payer_id: localIdentity, amount: 300, description: "Airbnb", timestamp: ctx.timestamp });
+    ctx.db.expense_split.insert({ expense_id: exp1, debtor_id: demoUsers[0].id, amount_owed: 100 });
+    ctx.db.expense_split.insert({ expense_id: exp1, debtor_id: demoUsers[1].id, amount_owed: 100 });
+    ctx.db.expense_split.insert({ expense_id: exp1, debtor_id: demoUsers[2].id, amount_owed: 100 });
+
+    const exp2 = `exp-demo-2`;
+    ctx.db.expense.insert({ id: exp2, trip_id, payer_id: demoUsers[0].id, amount: 150, description: "Dinner", timestamp: ctx.timestamp });
+    ctx.db.expense_split.insert({ expense_id: exp2, debtor_id: localIdentity, amount_owed: 50 });
+    ctx.db.expense_split.insert({ expense_id: exp2, debtor_id: demoUsers[1].id, amount_owed: 50 });
+    ctx.db.expense_split.insert({ expense_id: exp2, debtor_id: demoUsers[2].id, amount_owed: 50 });
+
+    const exp3 = `exp-demo-3`;
+    ctx.db.expense.insert({ id: exp3, trip_id, payer_id: demoUsers[1].id, amount: 60, description: "Drinks", timestamp: ctx.timestamp });
+    ctx.db.expense_split.insert({ expense_id: exp3, debtor_id: demoUsers[0].id, amount_owed: 30 });
+    ctx.db.expense_split.insert({ expense_id: exp3, debtor_id: localIdentity, amount_owed: 30 });
+    
+    const exp4 = `exp-demo-4`;
+    ctx.db.expense.insert({ id: exp4, trip_id, payer_id: demoUsers[2].id, amount: 150, description: "Settlement", timestamp: ctx.timestamp });
+    ctx.db.expense_split.insert({ expense_id: exp4, debtor_id: localIdentity, amount_owed: 100 });
+    ctx.db.expense_split.insert({ expense_id: exp4, debtor_id: demoUsers[0].id, amount_owed: 50 });
   }
 );

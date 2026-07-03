@@ -13,5 +13,5 @@ import {
 export default __t.row({
   id: __t.string().primaryKey(),
   name: __t.string(),
-  createdAt: __t.u64().name("created_at"),
+  createdAt: __t.timestamp().name("created_at"),
 });

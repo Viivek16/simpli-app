@@ -9,10 +9,14 @@ import { type Infer as __Infer } from "spacetimedb";
 import AddExpenseReducer from "../add_expense_reducer";
 import CreateTripReducer from "../create_trip_reducer";
 import CreateUserReducer from "../create_user_reducer";
+import JoinTripReducer from "../join_trip_reducer";
+import SeedDemoReducer from "../seed_demo_reducer";
 import SettleDebtReducer from "../settle_debt_reducer";
 
 export type AddExpenseParams = __Infer<typeof AddExpenseReducer>;
 export type CreateTripParams = __Infer<typeof CreateTripReducer>;
 export type CreateUserParams = __Infer<typeof CreateUserReducer>;
+export type JoinTripParams = __Infer<typeof JoinTripReducer>;
+export type SeedDemoParams = __Infer<typeof SeedDemoReducer>;
 export type SettleDebtParams = __Infer<typeof SettleDebtReducer>;
 

@@ -16,7 +16,7 @@ export const Expense = __t.object("Expense", {
   payerId: __t.string(),
   amount: __t.f64(),
   description: __t.string(),
-  timestamp: __t.u64(),
+  timestamp: __t.timestamp(),
 });
 export type Expense = __Infer<typeof Expense>;
 
@@ -30,9 +30,15 @@ export type ExpenseSplit = __Infer<typeof ExpenseSplit>;
 export const Trip = __t.object("Trip", {
   id: __t.string(),
   name: __t.string(),
-  createdAt: __t.u64(),
+  createdAt: __t.timestamp(),
 });
 export type Trip = __Infer<typeof Trip>;
+
+export const TripMember = __t.object("TripMember", {
+  tripId: __t.string(),
+  userId: __t.string(),
+});
+export type TripMember = __Infer<typeof TripMember>;
 
 export const User = __t.object("User", {
   id: __t.identity(),

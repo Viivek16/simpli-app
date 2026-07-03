@@ -22,13 +22,21 @@ export function useTrip(): Trip[] {
       const c = SpacetimeDB.conn as any;
       if (!c) return false;
       const load = () => {
-        try { setTrips([...c.db.trip.iter()].map((r: any) => ({ id: r.id, name: r.name }))); }
+        try {
+          const allTrips = [...c.db.trip.iter()];
+          const memberTripIds = new Set([...c.db.trip_member.iter()].filter((m: any) => m.userId === SpacetimeDB.localIdentity || m.user_id === SpacetimeDB.localIdentity).map((m: any) => m.tripId || m.trip_id));
+          setTrips(allTrips.filter(t => memberTripIds.has(t.id)).map((r: any) => ({ id: r.id, name: r.name })));
+        }
         catch { setTrips([]); }
       };
       try {
         c.db.trip.onInsert(load); c.db.trip.onUpdate(load); c.db.trip.onDelete(load);
+        if (c.db.trip_member) { c.db.trip_member.onInsert(load); c.db.trip_member.onUpdate(load); c.db.trip_member.onDelete(load); }
         load();
-        return () => { c.db.trip.removeOnInsert(load); c.db.trip.removeOnUpdate(load); c.db.trip.removeOnDelete(load); };
+        return () => {
+          c.db.trip.removeOnInsert(load); c.db.trip.removeOnUpdate(load); c.db.trip.removeOnDelete(load);
+          if (c.db.trip_member) { c.db.trip_member.removeOnInsert(load); c.db.trip_member.removeOnUpdate(load); c.db.trip_member.removeOnDelete(load); }
+        };
       } catch { return false; }
     };
     const cleanup = sub(); if (cleanup) return cleanup;
@@ -175,6 +183,30 @@ const TripRoom = ({
         </motion.button>
       </div>
 
+      {/* Legend / HUD */}
+      <div style={{
+        position: 'absolute', bottom: '32px', left: '32px',
+        pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: '8px',
+        background: 'rgba(10,12,11,0.6)', backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px',
+        padding: '16px', color: '#9caca9', fontSize: '0.75rem', fontWeight: 600
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#FF7A1A' }} /> You
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22D3EE' }} /> Others
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ opacity: 0.7 }}>Glow</span> <span>Bright = High Debt</span> <span>•</span> <span>Planet = Settled</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ opacity: 0.7 }}>Lines</span> <span>Thickness = Debt Amount</span> <span>•</span> <span>Flow = Debtor → Creditor</span>
+        </div>
+      </div>
+
       {/* Expense List Panel (Right) */}
       <div style={{
         pointerEvents: 'all',
@@ -260,7 +292,6 @@ const Dashboard = ({
 }: {
   profile: GoogleProfile; isConnected: boolean; onLogout: () => void; onSelectTrip: (trip: Trip) => void;
 }) => {
-  const trips = useTrip();
   const [newTripName, setNewTripName] = useState('');
   const [uiMsg, setUiMsg] = useState<{ text: string; err: boolean } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -348,44 +379,7 @@ const Dashboard = ({
           </p>
         </div>
 
-        {/* Trips List inside Island */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '40vh', overflowY: 'auto' }}>
-          {trips.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px', color: '#555' }}>You have no active trips.</div>
-          ) : (
-            trips.map((trip) => (
-              <motion.button
-                key={trip.id}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => onSelectTrip(trip)}
-                style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  borderRadius: '16px', padding: '16px 24px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  cursor: 'pointer', textAlign: 'left',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-                  transition: 'background 200ms ease, border-color 200ms ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(156,174,169,0.1)';
-                  e.currentTarget.style.borderColor = 'rgba(156,174,169,0.3)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'radial-gradient(circle, rgba(156,174,169,0.8) 0%, rgba(156,174,169,0.2) 70%, transparent 100%)', boxShadow: '0 0 16px rgba(156,174,169,0.4)' }} />
-                  <span style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f8f9fa' }}>{trip.name}</span>
-                </div>
-                <span style={{ color: '#9caca9', fontWeight: 600 }}>Explore →</span>
-              </motion.button>
-            ))
-          )}
-        </div>
+        {/* Trips List inside Island is removed in Macro View */}
 
         <form onSubmit={handleCreate} style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
           <input
@@ -543,15 +537,35 @@ function App() {
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const isConnected = useIsConnected();
 
+const ENABLE_DEMO_SEED = true;
+
   // Initialize SpacetimeDB globally exactly once
   useEffect(() => {
     initSpacetimeDB();
     const u1 = SpacetimeDB.onSpacetimeConnect(() => {
       const c = SpacetimeDB.conn as any;
       if (c) {
-        c.subscriptionBuilder().onApplied(() => {}).subscribe([
+        c.subscriptionBuilder().onApplied(() => {
+          if (ENABLE_DEMO_SEED && SpacetimeDB.localIdentity) {
+            const hasTrips = [...c.db.trip_member.iter()].some((m: any) => m.userId === SpacetimeDB.localIdentity || m.user_id === SpacetimeDB.localIdentity);
+            const seeded = localStorage.getItem('simpli_demo_seeded');
+            if (!hasTrips && !seeded) {
+              localStorage.setItem('simpli_demo_seeded', 'true');
+              const demoTripId = `demo-${Date.now()}`;
+              try {
+                c.reducers.createTrip({ tripId: demoTripId, name: "Goa Trip 🌊" });
+                setTimeout(() => {
+                  c.reducers.seedDemo({ tripId: demoTripId });
+                }, 1000); // Small delay to let createTrip sync
+              } catch (e) {
+                console.error('Demo seed failed', e);
+              }
+            }
+          }
+        }).subscribe([
           'SELECT * FROM user', 'SELECT * FROM trip',
           'SELECT * FROM expense', 'SELECT * FROM expense_split',
+          'SELECT * FROM trip_member',
         ]);
       }
     });
