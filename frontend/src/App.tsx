@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { initSpacetimeDB } from './spacetimedb';
 import * as SpacetimeDB from './spacetimedb';
 import { useExpense, useExpenseSplit } from './module_bindings/hooks';
-import { LiveDebtConstellation } from './components/LiveDebtConstellation';
 import { KarmaBar } from './components/KarmaBar';
 import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground } from './components/GalaxyBackground';
@@ -569,9 +568,6 @@ function App() {
       
       {/* 3D Galaxy WebGL Background */}
       <GalaxyBackground activeTripId={selectedTrip?.id ?? null} />
-      
-      {/* 2D Heatmap SVG Overlay (Only visible when trip selected) */}
-      <LiveDebtConstellation activeTripId={selectedTrip?.id ?? null} />
 
       <AnimatePresence mode="wait">
         {!profile ? (

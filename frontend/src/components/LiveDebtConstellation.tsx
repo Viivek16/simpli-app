@@ -1,18 +1,19 @@
 import { useMemo } from 'react';
-import { motion } from 'framer-motion';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
+import * as SpacetimeDB from '../spacetimedb';
+import { Line, Html } from '@react-three/drei';
+import * as THREE from 'three';
 
 interface Props {
   activeTripId: string | null;
 }
 
-
-
-// ─── Active Trip Graph ────────────────────────────────────────────────────────
-const TripGraph = ({ tripId }: { tripId: string }) => {
+export const LiveDebtConstellation = ({ activeTripId }: Props) => {
   const users = useUser();
   const splits = useExpenseSplit();
   const expenses = useExpense();
+
+  if (!activeTripId) return null;
 
   // Calculate net debt for each user
   const netDebts = useMemo(() => {
@@ -23,7 +24,7 @@ const TripGraph = ({ tripId }: { tripId: string }) => {
       debts[uid] = 0;
     });
 
-    const tripExpenses = expenses.filter(e => e.tripId === tripId);
+    const tripExpenses = expenses.filter(e => e.tripId === activeTripId);
     
     tripExpenses.forEach(expense => {
       const expSplits = splits.filter(s => s.expenseId === expense.id);
@@ -34,9 +35,9 @@ const TripGraph = ({ tripId }: { tripId: string }) => {
     });
     
     return debts;
-  }, [users, splits, expenses, tripId]);
+  }, [users, splits, expenses, activeTripId]);
 
-  // Debt lines logic
+  // Specific debt between users
   const owes = useMemo(() => {
     const map: Record<string, Record<string, number>> = {};
     users.forEach(u => {
@@ -45,7 +46,7 @@ const TripGraph = ({ tripId }: { tripId: string }) => {
       map[uid] = {};
     });
     splits.forEach(split => {
-      const expense = expenses.find(e => e.id === split.expenseId && e.tripId === tripId);
+      const expense = expenses.find(e => e.id === split.expenseId && e.tripId === activeTripId);
       if (!expense) return;
       const debtorId = split.debtorId;
       const payeeId = expense.payerId;
@@ -55,34 +56,7 @@ const TripGraph = ({ tripId }: { tripId: string }) => {
       }
     });
     return map;
-  }, [users, splits, expenses, tripId]);
-
-  const nodes = useMemo(() => {
-    const cx = window.innerWidth / 2;
-    const cy = window.innerHeight / 2;
-    const rx = Math.min(window.innerWidth * 0.35, 320);
-    const ry = Math.min(window.innerHeight * 0.3, 240);
-    return users.map((user, i) => {
-      const angle = (i / Math.max(users.length, 1)) * 2 * Math.PI - Math.PI / 2;
-      const uid = typeof user.id === 'object' && 'toHexString' in user.id
-        ? (user.id as any).toHexString() : String(user.id);
-      return {
-        id: uid,
-        name: user.name,
-        x: cx + Math.cos(angle) * rx,
-        y: cy + Math.sin(angle) * ry,
-        netDebt: netDebts[uid] || 0,
-      };
-    });
-  }, [users, netDebts]);
-
-  const maxDebtLine = useMemo(() => {
-    let max = 0;
-    Object.values(owes).forEach(payees =>
-      Object.values(payees).forEach(v => { if (v > max) max = v; })
-    );
-    return max || 1;
-  }, [owes]);
+  }, [users, splits, expenses, activeTripId]);
 
   const maxNetDebtMagnitude = useMemo(() => {
     let max = 0;
@@ -92,114 +66,113 @@ const TripGraph = ({ tripId }: { tripId: string }) => {
     return max || 1;
   }, [netDebts]);
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none' }}>
-      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible' }}>
-        {/* Debt lines */}
-        {nodes.map(nodeA =>
-          nodes.map(nodeB => {
-            if (nodeA.id === nodeB.id) return null;
-            const amount = owes[nodeA.id]?.[nodeB.id] || 0;
-            if (amount <= 0) return null;
-            const intensity = amount / maxDebtLine;
-            return (
-              <motion.line
-                key={`${nodeA.id}-${nodeB.id}`}
-                x1={nodeA.x} y1={nodeA.y}
-                x2={nodeB.x} y2={nodeB.y}
-                stroke={`rgba(156,174,169,${0.1 + intensity * 0.4})`}
-                strokeWidth={0.8 + intensity * 3}
-                strokeDasharray="4 6"
-                initial={{ opacity: 0, pathLength: 0 }}
-                animate={{ opacity: 1, pathLength: 1 }}
-                transition={{ duration: 0.9, ease: [0.23, 1, 0.32, 1] }}
-              />
-            );
-          })
-        )}
-      </svg>
+  const maxSpecificDebt = useMemo(() => {
+    let max = 0;
+    Object.values(owes).forEach(payees =>
+      Object.values(payees).forEach(v => { if (v > max) max = v; })
+    );
+    return max || 1;
+  }, [owes]);
+
+  // Generate 3D coordinates for each user node
+  const nodes = useMemo(() => {
+    // 3D positioning logic
+    const radius = 6; // Spread them out in 3D space
+    return users.map((user, i) => {
+      // Golden spiral distribution on a sphere
+      const phi = Math.acos(1 - 2 * (i + 0.5) / users.length);
+      const theta = Math.PI * (1 + Math.sqrt(5)) * i;
       
-      {/* HTML Nodes for better box-shadow support */}
-      {nodes.map((node, i) => {
-        // Heatmap logic
-        // If netDebt < -0.5 (owes money) -> warm terracotta
-        // If netDebt > 0.5 (is owed money) -> frosted sage
-        // Near 0 -> neutral/dim
-        const isDebt = node.netDebt < -0.5;
-        const isCredit = node.netDebt > 0.5;
+      const x = radius * Math.cos(theta) * Math.sin(phi);
+      const y = radius * Math.cos(phi);
+      const z = radius * Math.sin(theta) * Math.sin(phi);
+      
+      const uid = typeof user.id === 'object' && 'toHexString' in user.id
+        ? (user.id as any).toHexString() : String(user.id);
+      
+      return {
+        id: uid,
+        name: user.name,
+        position: new THREE.Vector3(x, y, z),
+        netDebt: netDebts[uid] || 0,
+      };
+    });
+  }, [users, netDebts]);
+
+  const localIdentity = SpacetimeDB.localIdentity ?? 'unknown';
+
+  return (
+    <group>
+      {/* 3D Nodes (Stars) */}
+      {nodes.map(node => {
+        const isLocalUser = node.id === localIdentity;
+        const color = isLocalUser ? '#ff8c00' : '#00ffff'; // Vibrant Orange for self, Cyan for others
         
-        const intensity = Math.min(Math.abs(node.netDebt) / maxNetDebtMagnitude, 1);
+        // Emissive intensity: 0 debt = 0.5, max debt = 5.0
+        const debtRatio = Math.min(Math.abs(node.netDebt) / maxNetDebtMagnitude, 1);
+        const emissiveIntensity = 0.5 + (debtRatio * 4.5); 
         
-        // Base sizes
-        const size = 32 + (intensity * 12); // Slightly larger for higher balances
-        
-        // Colors
-        const baseColor = isDebt ? 'rgba(217, 138, 108, 1)' : (isCredit ? 'rgba(156, 174, 169, 1)' : 'rgba(255,255,255,0.7)');
-        const glowColor = isDebt ? `rgba(217, 138, 108, ${0.4 + intensity * 0.4})` : `rgba(156, 174, 169, ${0.2 + intensity * 0.3})`;
-        
-        const glowSpread = 10 + (intensity * 25);
+        const size = 0.4 + (debtRatio * 0.4); // slightly larger if high debt
 
         return (
-          <motion.div
-            key={node.id}
-            initial={{ opacity: 0, scale: 0 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: i * 0.05, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-            style={{
-              position: 'absolute',
-              left: node.x - size / 2,
-              top: node.y - size / 2,
-              width: size,
-              height: size,
-              borderRadius: '50%',
-              background: '#0a0a0a',
-              border: `2px solid ${baseColor}`,
-              boxShadow: `0 0 ${glowSpread}px ${glowColor}, inset 0 0 ${glowSpread/2}px ${glowColor}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: baseColor,
-              fontWeight: 700,
-              fontSize: '0.8rem',
-              fontFamily: 'Inter, sans-serif'
-            }}
-          >
-            {node.name.substring(0, 2).toUpperCase()}
+          <group key={node.id} position={node.position}>
+            <mesh>
+              <sphereGeometry args={[size, 32, 32]} />
+              <meshStandardMaterial 
+                color={color} 
+                emissive={color}
+                emissiveIntensity={emissiveIntensity}
+                toneMapped={false}
+              />
+            </mesh>
             
-            <div style={{
-              position: 'absolute',
-              top: '100%',
-              marginTop: '12px',
-              textAlign: 'center',
-              whiteSpace: 'nowrap',
-              color: 'rgba(255,255,255,0.7)',
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              textShadow: '0 2px 4px rgba(0,0,0,0.8)'
-            }}>
-              {node.name}
-              {Math.abs(node.netDebt) > 0.01 && (
-                <div style={{ color: isDebt ? '#d98a6c' : '#9bafa4', fontSize: '0.65rem', marginTop: '2px', fontWeight: 600 }}>
-                  {isDebt ? '-' : '+'}${Math.abs(node.netDebt).toFixed(2)}
-                </div>
-              )}
-            </div>
-          </motion.div>
+            {/* HTML label anchored to the 3D position */}
+            <Html center distanceFactor={15} style={{ pointerEvents: 'none' }}>
+              <div style={{
+                marginTop: '30px',
+                textAlign: 'center',
+                whiteSpace: 'nowrap',
+                color: 'rgba(255,255,255,0.9)',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                textShadow: '0 2px 4px rgba(0,0,0,1)'
+              }}>
+                {node.name}
+                {Math.abs(node.netDebt) > 0.01 && (
+                  <div style={{ color: node.netDebt < 0 ? '#ff8c00' : '#00ffff', fontSize: '0.75rem', marginTop: '2px', fontWeight: 800 }}>
+                    {node.netDebt < 0 ? '-' : '+'}${Math.abs(node.netDebt).toFixed(2)}
+                  </div>
+                )}
+              </div>
+            </Html>
+          </group>
         );
       })}
-    </div>
-  );
-};
 
-// ─── Public Component ─────────────────────────────────────────────────────────
-export const LiveDebtConstellation = ({ activeTripId }: Props) => {
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-      <motion.div
-        animate={{ opacity: activeTripId ? 1 : 0 }}
-        transition={{ duration: 0.8 }}
-        style={{ position: 'absolute', inset: 0 }}
-      >
-        {activeTripId && <TripGraph tripId={activeTripId} />}
-      </motion.div>
-    </div>
+      {/* 3D Debt Lines connecting the stars */}
+      {nodes.map(nodeA =>
+        nodes.map(nodeB => {
+          if (nodeA.id === nodeB.id) return null;
+          const amount = owes[nodeA.id]?.[nodeB.id] || 0;
+          if (amount <= 0) return null;
+          
+          const debtRatio = amount / maxSpecificDebt;
+          const lineWidth = 1 + debtRatio * 8; // Line width maps directly to debt
+          const opacity = 0.2 + debtRatio * 0.8;
+
+          return (
+            <Line
+              key={`line-${nodeA.id}-${nodeB.id}`}
+              points={[nodeA.position, nodeB.position]}
+              color="#ffffff"
+              lineWidth={lineWidth}
+              transparent
+              opacity={opacity}
+              toneMapped={false}
+            />
+          );
+        })
+      )}
+    </group>
   );
 };

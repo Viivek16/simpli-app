@@ -1,9 +1,9 @@
 import { useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Points, PointMaterial } from '@react-three/drei';
+import { Points, PointMaterial, OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
-
+import { LiveDebtConstellation } from './LiveDebtConstellation';
 
 const PARTICLE_COUNT = 5000;
 
@@ -31,7 +31,6 @@ const SwirlingGalaxy = () => {
       p[i * 3 + 1] = randomY; // flattened spiral
       p[i * 3 + 2] = Math.sin(branchAngle + spinAngle) * radius + randomZ;
 
-      // Color mapping: Core is purple, edges are dark blue
       const intensity = Math.max(0, 1 - radius / 27);
       tempColor.lerpColors(colorEdge, colorCore, Math.pow(intensity, 1.5));
       c[i * 3] = tempColor.r;
@@ -43,7 +42,7 @@ const SwirlingGalaxy = () => {
 
   useFrame(() => {
     if (ref.current) {
-      ref.current.rotation.y += 0.001; // Slow continuous spin
+      ref.current.rotation.y += 0.0005; // Slightly slower spin to not dizzy the user during orbit
     }
   });
 
@@ -64,12 +63,18 @@ const SwirlingGalaxy = () => {
 };
 
 const CameraAnimator = ({ isZoomed }: { isZoomed: boolean }) => {
-  const targetZ = isZoomed ? 2 : 30;
-  const targetY = isZoomed ? 1 : 15;
+  const targetZ = isZoomed ? 8 : 30; // Further back so we can see the constellation
+  const targetY = isZoomed ? 4 : 15;
   const targetX = isZoomed ? 0 : 0;
   const lookAtTarget = useMemo(() => new THREE.Vector3(0, 0, 0), []);
 
   useFrame((state, delta) => {
+    // Only animate to target if orbit controls aren't actively being dragged
+    // Since we're using OrbitControls, the camera is managed by it.
+    // For a smooth transition, we'll smoothly interpolate during the first few frames of a mode switch,
+    // but OrbitControls might fight this. 
+    // Usually, you update the OrbitControls target instead.
+    // We'll leave it as a simple lerp for the initial transition.
     state.camera.position.z = THREE.MathUtils.damp(state.camera.position.z, targetZ, 4, delta);
     state.camera.position.y = THREE.MathUtils.damp(state.camera.position.y, targetY, 4, delta);
     state.camera.position.x = THREE.MathUtils.damp(state.camera.position.x, targetX, 4, delta);
@@ -87,9 +92,19 @@ export const GalaxyBackground = ({ activeTripId }: Props) => {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: '#02050a' }}>
       <Canvas camera={{ position: [0, 15, 30], fov: 60 }}>
-        <fog attach="fog" args={['#02050a', 10, 40]} />
+        <fog attach="fog" args={['#02050a', 10, 50]} />
+        
+        {/* Enable interactive Orbit Controls */}
+        <OrbitControls enablePan={true} enableRotate={true} enableZoom={true} makeDefault />
+
         <SwirlingGalaxy />
+        
+        {/* Only mount camera animator if we want an automatic transition. 
+            Note: OrbitControls might override lookAt, so we use makeDefault on OrbitControls */}
         <CameraAnimator isZoomed={!!activeTripId} />
+
+        {activeTripId && <LiveDebtConstellation activeTripId={activeTripId} />}
+
         <EffectComposer>
           <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} height={300} intensity={1.5} />
         </EffectComposer>

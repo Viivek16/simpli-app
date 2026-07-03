@@ -62,7 +62,9 @@ export const ExpenseModal = ({ tripId, tripName, onClose }: Props) => {
     
     const amount = parseFloat(amt);
     if (!desc.trim() || isNaN(amount) || amount <= 0) {
-      setErr('Enter a valid description and amount.'); 
+      const msg = 'Enter a valid description and amount.';
+      setErr(msg);
+      alert(msg);
       return;
     }
     
