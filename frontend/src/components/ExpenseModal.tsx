@@ -76,12 +76,14 @@ export const ExpenseModal = ({ tripId, tripName, onClose }: Props) => {
         tripId, 
         amount,
         description: desc.trim(),
-        isPersonal: isPersonal,
-        splits: isPersonal ? '[]' : JSON.stringify([{ debtor_id: identity, amount_owed: amount }]),
+        is_personal: isPersonal,
+        splits: isPersonal ? [] : [{ debtor_id: identity, amount_owed: amount }],
       });
       onClose();
-    } catch (e: any) { 
-      setErr(e?.message ?? 'Failed to add expense.'); 
+    } catch (e: any) {
+      const msg = e?.message || 'Failed to add expense';
+      setErr(msg);
+      alert(msg);
     } finally { 
       setLoading(false); 
     }

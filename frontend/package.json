@@ -13,6 +13,7 @@
     "@react-oauth/google": "^0.13.5",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "@react-three/postprocessing": "^3.0.4",
     "@types/three": "^0.185.0",
     "framer-motion": "^12.42.2",
     "jwt-decode": "^4.0.0",
