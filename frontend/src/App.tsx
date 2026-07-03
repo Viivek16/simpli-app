@@ -12,10 +12,10 @@ import { GalaxyBackground } from './components/GalaxyBackground';
 const EO = [0.23, 1, 0.32, 1] as const;
 
 interface GoogleProfile { name: string; email: string; picture: string; sub: string; }
-interface Trip { id: string; name: string; }
+export interface Trip { id: string; name: string; }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
-function useTrip(): Trip[] {
+export function useTrip(): Trip[] {
   const [trips, setTrips] = useState<Trip[]>([]);
   useEffect(() => {
     const sub = () => {
@@ -37,6 +37,36 @@ function useTrip(): Trip[] {
     return () => { u(); inner?.(); };
   }, []);
   return trips;
+}
+
+export function useTripMember(tripId: string): string[] {
+  const [members, setMembers] = useState<string[]>([]);
+  useEffect(() => {
+    const sub = () => {
+      const c = SpacetimeDB.conn as any;
+      if (!c) return false;
+      const load = () => {
+        try { 
+          const iter = c.db.tripMember ? c.db.tripMember.iter() : c.db.trip_member.iter();
+          const tripMembers = [...iter].filter((r: any) => r.tripId === tripId || r.trip_id === tripId).map((r: any) => r.userId || r.user_id);
+          setMembers([...new Set(tripMembers)] as string[]); // Ensure uniqueness!
+        }
+        catch { setMembers([]); }
+      };
+      try {
+        const table = c.db.tripMember || c.db.trip_member;
+        if (!table) return false;
+        table.onInsert(load); table.onUpdate(load); table.onDelete(load);
+        load();
+        return () => { table.removeOnInsert(load); table.removeOnUpdate(load); table.removeOnDelete(load); };
+      } catch { return false; }
+    };
+    const cleanup = sub(); if (cleanup) return cleanup;
+    let inner: (() => void) | undefined;
+    const u = SpacetimeDB.onSpacetimeConnect(() => { inner = sub() || undefined; });
+    return () => { u(); inner?.(); };
+  }, [tripId]);
+  return members;
 }
 
 function useIsConnected() {
@@ -252,7 +282,12 @@ const Dashboard = ({
       c.reducers.createTrip({ tripId, name });
       setNewTripName('');
       onSelectTrip({ id: tripId, name });
-    } catch (e: any) { flash(e?.message ?? 'Could not create trip.', true); }
+    } catch (e: any) {
+      const msg = e?.message ?? 'Could not create trip.';
+      console.error('create_trip failed:', e);
+      alert(msg);
+      flash(msg, true);
+    }
   }, [newTripName, onSelectTrip]);
 
   return (
@@ -567,7 +602,7 @@ function App() {
     <div style={{ position: 'relative', width: '100vw', height: '100dvh', background: '#050505', overflow: 'hidden' }}>
       
       {/* 3D Galaxy WebGL Background */}
-      <GalaxyBackground activeTripId={selectedTrip?.id ?? null} />
+      <GalaxyBackground activeTripId={selectedTrip?.id ?? null} onSelectTrip={setSelectedTrip} />
 
       <AnimatePresence mode="wait">
         {!profile ? (

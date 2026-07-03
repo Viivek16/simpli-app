@@ -84,6 +84,7 @@ export const ExpenseModal = ({ tripId, tripName, onClose }: Props) => {
       onClose();
     } catch (e: any) {
       const msg = e?.message || 'Failed to add expense';
+      console.error('add_expense failed:', e);
       setErr(msg);
       alert(msg);
     } finally { 

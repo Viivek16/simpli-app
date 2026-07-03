@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
+import { useTripMember } from '../App';
 import * as SpacetimeDB from '../spacetimedb';
 import { Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -9,7 +10,15 @@ interface Props {
 }
 
 export const LiveDebtConstellation = ({ activeTripId }: Props) => {
-  const users = useUser();
+  const allUsers = useUser();
+  const tripMemberIds = useTripMember(activeTripId || '');
+  const users = useMemo(() => {
+    return allUsers.filter(u => {
+      const uid = typeof u.id === 'object' && 'toHexString' in u.id ? (u.id as any).toHexString() : String(u.id);
+      return tripMemberIds.includes(uid);
+    });
+  }, [allUsers, tripMemberIds]);
+
   const splits = useExpenseSplit();
   const expenses = useExpense();
 

@@ -1,84 +1,117 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Points, PointMaterial, OrbitControls } from '@react-three/drei';
+import { Points, PointMaterial, OrbitControls, Html } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { LiveDebtConstellation } from './LiveDebtConstellation';
+import { useTrip } from '../App';
+import type { Trip } from '../App';
 
-const PARTICLE_COUNT = 5000;
+const PARTICLE_COUNT = 2500; // reduced per galaxy to maintain performance with multiple galaxies
 
-const SwirlingGalaxy = () => {
+const SwirlingGalaxy = ({ position, colorCoreStr, colorEdgeStr, onClick, name }: { position: THREE.Vector3, colorCoreStr: string, colorEdgeStr: string, onClick?: () => void, name?: string }) => {
   const ref = useRef<THREE.Points>(null);
+  const [hovered, setHovered] = useState(false);
 
   const { positions, colors } = useMemo(() => {
     const p = new Float32Array(PARTICLE_COUNT * 3);
     const c = new Float32Array(PARTICLE_COUNT * 3);
 
-    const colorCore = new THREE.Color('#b14bf4');
-    const colorEdge = new THREE.Color('#0a192f');
+    const colorCore = new THREE.Color(colorCoreStr);
+    const colorEdge = new THREE.Color(colorEdgeStr);
     const tempColor = new THREE.Color();
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const radius = Math.random() * 25 + 2;
-      const spinAngle = radius * 0.5;
+      // Create a tighter cluster for individual trip galaxies
+      const radius = Math.random() * 15 + 1;
+      const spinAngle = radius * 0.8;
       const branchAngle = ((i % 3) * Math.PI * 2) / 3;
       
-      const randomX = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 3;
-      const randomY = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 3;
-      const randomZ = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 3;
+      const randomX = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 2;
+      const randomY = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 2;
+      const randomZ = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 2;
 
       p[i * 3] = Math.cos(branchAngle + spinAngle) * radius + randomX;
-      p[i * 3 + 1] = randomY; // flattened spiral
+      p[i * 3 + 1] = randomY; 
       p[i * 3 + 2] = Math.sin(branchAngle + spinAngle) * radius + randomZ;
 
-      const intensity = Math.max(0, 1 - radius / 27);
+      const intensity = Math.max(0, 1 - radius / 18);
       tempColor.lerpColors(colorEdge, colorCore, Math.pow(intensity, 1.5));
       c[i * 3] = tempColor.r;
       c[i * 3 + 1] = tempColor.g;
       c[i * 3 + 2] = tempColor.b;
     }
     return { positions: p, colors: c };
-  }, []);
+  }, [colorCoreStr, colorEdgeStr]);
 
   useFrame(() => {
     if (ref.current) {
-      ref.current.rotation.y += 0.0005; // Slightly slower spin to not dizzy the user during orbit
+      ref.current.rotation.y += 0.001; 
+      if (hovered) {
+        ref.current.rotation.y += 0.002; // spin faster on hover
+      }
     }
   });
 
   return (
-    <Points ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}>
-      <PointMaterial 
-        transparent 
-        vertexColors 
-        size={0.12} 
-        sizeAttenuation={true} 
-        depthWrite={false} 
-        opacity={0.8} 
-        blending={THREE.AdditiveBlending} 
-        toneMapped={false}
-      />
-    </Points>
+    <group position={position}>
+      <Points 
+        ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}
+        onClick={(e) => {
+          if (onClick) {
+            e.stopPropagation();
+            onClick();
+          }
+        }}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+      >
+        <PointMaterial 
+          transparent 
+          vertexColors 
+          size={hovered ? 0.2 : 0.12} 
+          sizeAttenuation={true} 
+          depthWrite={false} 
+          opacity={0.8} 
+          blending={THREE.AdditiveBlending} 
+          toneMapped={false}
+        />
+      </Points>
+      
+      {name && (
+        <Html center distanceFactor={15} style={{ pointerEvents: 'none' }}>
+          <div style={{
+            color: '#fff',
+            fontWeight: 800,
+            fontSize: '1.2rem',
+            textShadow: '0 2px 10px rgba(0,0,0,1)',
+            opacity: hovered ? 1 : 0.7,
+            transition: 'opacity 0.2s',
+            whiteSpace: 'nowrap',
+            marginTop: '40px'
+          }}>
+            {name}
+          </div>
+        </Html>
+      )}
+    </group>
   );
 };
 
-const CameraAnimator = ({ isZoomed }: { isZoomed: boolean }) => {
-  const targetZ = isZoomed ? 8 : 30; // Further back so we can see the constellation
-  const targetY = isZoomed ? 4 : 15;
-  const targetX = isZoomed ? 0 : 0;
-  const lookAtTarget = useMemo(() => new THREE.Vector3(0, 0, 0), []);
-
+const CameraAnimator = ({ activeTripId }: { activeTripId: string | null }) => {
   useFrame((state, delta) => {
-    // Only animate to target if orbit controls aren't actively being dragged
-    // Since we're using OrbitControls, the camera is managed by it.
-    // For a smooth transition, we'll smoothly interpolate during the first few frames of a mode switch,
-    // but OrbitControls might fight this. 
-    // Usually, you update the OrbitControls target instead.
-    // We'll leave it as a simple lerp for the initial transition.
-    state.camera.position.z = THREE.MathUtils.damp(state.camera.position.z, targetZ, 4, delta);
-    state.camera.position.y = THREE.MathUtils.damp(state.camera.position.y, targetY, 4, delta);
-    state.camera.position.x = THREE.MathUtils.damp(state.camera.position.x, targetX, 4, delta);
-    state.camera.lookAt(lookAtTarget);
+    if (activeTripId) {
+      // Zoom in to Micro View
+      state.camera.position.z = THREE.MathUtils.damp(state.camera.position.z, 8, 4, delta);
+      state.camera.position.y = THREE.MathUtils.damp(state.camera.position.y, 4, 4, delta);
+      state.camera.position.x = THREE.MathUtils.damp(state.camera.position.x, 0, 4, delta);
+    } else {
+      // Zoom out to Macro View
+      state.camera.position.z = THREE.MathUtils.damp(state.camera.position.z, 40, 4, delta);
+      state.camera.position.y = THREE.MathUtils.damp(state.camera.position.y, 20, 4, delta);
+      state.camera.position.x = THREE.MathUtils.damp(state.camera.position.x, 0, 4, delta);
+    }
+    state.camera.lookAt(0, 0, 0);
   });
 
   return null;
@@ -86,23 +119,70 @@ const CameraAnimator = ({ isZoomed }: { isZoomed: boolean }) => {
 
 interface Props {
   activeTripId: string | null;
+  onSelectTrip?: (trip: Trip) => void;
 }
 
-export const GalaxyBackground = ({ activeTripId }: Props) => {
+export const GalaxyBackground = ({ activeTripId, onSelectTrip }: Props) => {
+  const trips = useTrip();
+
+  // Distinct colors for different galaxies in Macro View
+  const palette = [
+    { core: '#b14bf4', edge: '#0a192f' }, // Purple / Blue
+    { core: '#ff8c00', edge: '#4a1500' }, // Orange / Dark Red
+    { core: '#00ffff', edge: '#002244' }, // Cyan / Dark Blue
+    { core: '#39ff14', edge: '#003300' }, // Neon Green / Dark Green
+    { core: '#ff007f', edge: '#33001a' }, // Pink / Dark Red
+  ];
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: '#02050a' }}>
-      <Canvas camera={{ position: [0, 15, 30], fov: 60 }}>
-        <fog attach="fog" args={['#02050a', 10, 50]} />
+      <Canvas camera={{ position: [0, 20, 40], fov: 60 }}>
+        <fog attach="fog" args={['#02050a', 10, 80]} />
         
-        {/* Enable interactive Orbit Controls */}
         <OrbitControls enablePan={true} enableRotate={true} enableZoom={true} makeDefault />
 
-        <SwirlingGalaxy />
-        
-        {/* Only mount camera animator if we want an automatic transition. 
-            Note: OrbitControls might override lookAt, so we use makeDefault on OrbitControls */}
-        <CameraAnimator isZoomed={!!activeTripId} />
+        <CameraAnimator activeTripId={activeTripId} />
 
+        {activeTripId ? (
+          // MICRO VIEW: Render only the active trip's galaxy at the center
+          <SwirlingGalaxy 
+            position={new THREE.Vector3(0, 0, 0)} 
+            colorCoreStr="#b14bf4" 
+            colorEdgeStr="#0a192f" 
+          />
+        ) : (
+          // MACRO VIEW: Render all trips as distinct galaxies
+          trips.length > 0 ? (
+            trips.map((trip, idx) => {
+              // Position them in a circle or spiral
+              const radius = 25;
+              const angle = (idx / trips.length) * Math.PI * 2;
+              const x = Math.cos(angle) * radius;
+              const z = Math.sin(angle) * radius;
+              const colors = palette[idx % palette.length];
+
+              return (
+                <SwirlingGalaxy 
+                  key={trip.id}
+                  position={new THREE.Vector3(x, 0, z)}
+                  colorCoreStr={colors.core}
+                  colorEdgeStr={colors.edge}
+                  name={trip.name}
+                  onClick={() => onSelectTrip?.(trip)}
+                />
+              );
+            })
+          ) : (
+            // Empty state fallback (no trips)
+            <SwirlingGalaxy 
+              position={new THREE.Vector3(0, 0, 0)} 
+              colorCoreStr="#555555" 
+              colorEdgeStr="#111111" 
+            />
+          )
+        )}
+
+        {/* Constellations only visible in Micro View */}
         {activeTripId && <LiveDebtConstellation activeTripId={activeTripId} />}
 
         <EffectComposer>
