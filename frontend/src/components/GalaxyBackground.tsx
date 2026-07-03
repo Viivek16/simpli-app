@@ -7,7 +7,7 @@ import { LiveDebtConstellation } from './LiveDebtConstellation';
 import { ErrorBoundary } from './ErrorBoundary';
 import { useTrip, type Trip } from '../hooks/useTrips';
 
-const PARTICLE_COUNT = 2500;
+const PARTICLE_COUNT = 7500;
 
 const SwirlingGalaxy = ({
   position, colorCoreStr, colorEdgeStr, onClick, name, isMicroView,
@@ -57,9 +57,9 @@ const SwirlingGalaxy = ({
       >
         <PointMaterial
           transparent vertexColors
-          size={isMicroView ? 0.05 : (hovered ? 0.2 : 0.12)}
+          size={isMicroView ? 0.07 : (hovered ? 0.28 : 0.18)}
           sizeAttenuation depthWrite={false}
-          opacity={isMicroView ? 0.35 : 0.85}
+          opacity={isMicroView ? 0.4 : 1.0}
           blending={THREE.AdditiveBlending} toneMapped={false}
         />
       </Points>
@@ -137,9 +137,9 @@ export const GalaxyBackground = ({ activeTripId, onSelectTrip }: Props) => {
   const trips = useTrip();
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: '#02050a' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: '#02050a', pointerEvents: 'none' }}>
       <ErrorBoundary fallback={<CosmosFallback trips={trips} activeTripId={activeTripId} onSelectTrip={onSelectTrip} />}>
-        <Canvas camera={{ position: [0, 20, 40], fov: 60 }} dpr={[1, 2]}>
+        <Canvas camera={{ position: [0, 20, 40], fov: 60 }} dpr={[1, 2]} style={{ pointerEvents: activeTripId ? 'none' : 'all' }}>
           <fog attach="fog" args={['#02050a', 10, 80]} />
           <ambientLight intensity={0.12} />
           <OrbitControls
@@ -185,7 +185,7 @@ export const GalaxyBackground = ({ activeTripId, onSelectTrip }: Props) => {
           </ErrorBoundary>
 
           <EffectComposer>
-            <Bloom luminanceThreshold={0.6} mipmapBlur luminanceSmoothing={0.9} intensity={1.2} />
+            <Bloom luminanceThreshold={0.15} mipmapBlur luminanceSmoothing={0.9} intensity={1.4} />
           </EffectComposer>
         </Canvas>
       </ErrorBoundary>

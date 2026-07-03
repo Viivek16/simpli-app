@@ -471,8 +471,20 @@ function App() {
     } catch { return null; }
   });
   
-  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('simpli_selected_trip');
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
   const isConnected = useIsConnected();
+
+  // Keep selected trip synced to sessionStorage so Back + refresh still works
+  const selectTrip = (t: Trip | null) => {
+    if (t) sessionStorage.setItem('simpli_selected_trip', JSON.stringify(t));
+    else sessionStorage.removeItem('simpli_selected_trip');
+    setSelectedTrip(t);
+  };
 
   // Initialize SpacetimeDB globally exactly once
   useEffect(() => {
@@ -480,11 +492,16 @@ function App() {
     const u1 = SpacetimeDB.onSpacetimeConnect(() => {
       const c = SpacetimeDB.conn as any;
       if (c) {
-        c.subscriptionBuilder().onApplied(() => {}).subscribe([
-          'SELECT * FROM user', 'SELECT * FROM trip',
-          'SELECT * FROM expense', 'SELECT * FROM expense_split',
-          'SELECT * FROM trip_member',
-        ]);
+        c.subscriptionBuilder()
+          .onApplied(() => {
+            // Subscription data is ready — force a re-render so hooks pick up live data
+            console.log('[SIMPLI] Subscription applied, data is live.');
+          })
+          .subscribe([
+            'SELECT * FROM user', 'SELECT * FROM trip',
+            'SELECT * FROM expense', 'SELECT * FROM expense_split',
+            'SELECT * FROM trip_member',
+          ]);
       }
     });
     return () => { u1(); };
@@ -499,7 +516,7 @@ function App() {
         const c = SpacetimeDB.conn as any;
         if (c) {
           try { c.reducers.joinTrip({ tripId }); } catch { /* ignore if already member */ }
-          setSelectedTrip({ id: tripId, name: tripId });
+          selectTrip({ id: tripId, name: tripId });
         }
       }
       if (!profile) {
@@ -518,7 +535,7 @@ function App() {
       const c = SpacetimeDB.conn as any;
       if (c) {
         try { c.reducers.joinTrip({ tripId: pending }); } catch { /* ignore */ }
-        setSelectedTrip({ id: pending, name: pending });
+        selectTrip({ id: pending, name: pending });
       }
     }
   };
@@ -527,14 +544,14 @@ function App() {
     localStorage.removeItem('simpli_user');
     googleLogout();
     setProfile(null);
-    setSelectedTrip(null);
+    selectTrip(null);
   };
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100dvh', background: '#050505', overflow: 'hidden' }}>
       
       {/* 3D Galaxy WebGL Background */}
-      <GalaxyBackground activeTripId={selectedTrip?.id ?? null} onSelectTrip={setSelectedTrip} />
+      <GalaxyBackground activeTripId={selectedTrip?.id ?? null} onSelectTrip={selectTrip} />
 
       <AnimatePresence mode="wait">
         {!profile ? (
@@ -548,7 +565,7 @@ function App() {
                   trip={selectedTrip}
                   profile={profile}
                   isConnected={isConnected}
-                  onBack={() => setSelectedTrip(null)}
+                  onBack={() => selectTrip(null)}
                 />
               ) : (
                 <Dashboard
@@ -556,7 +573,7 @@ function App() {
                   profile={profile}
                   isConnected={isConnected}
                   onLogout={handleLogout}
-                  onSelectTrip={setSelectedTrip}
+                  onSelectTrip={selectTrip}
                 />
               )}
             </AnimatePresence>

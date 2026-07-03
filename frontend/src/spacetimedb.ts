@@ -1,7 +1,7 @@
 import { DbConnection } from "./module_bindings";
 
 const SPACETIMEDB_URI = "wss://maincloud.spacetimedb.com";
-const DATABASE_NAME = "simpli-db";
+const DATABASE_NAME = "server-simpli";
 
 export let conn: DbConnection | null = null;
 export let localIdentity: string | null = null;

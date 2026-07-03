@@ -101,15 +101,23 @@ export const ExpenseModal = ({ tripId, tripName, onClose }: Props) => {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={{ duration: 0.16 }} onClick={onClose}
+    <div
       style={{
         position: 'fixed', inset: 0, zIndex: 300,
-        background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(16px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
+        pointerEvents: 'all',
       }}
     >
+      {/* Clickable backdrop - separate element so the form is never affected */}
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.16 }}
+        onClick={onClose}
+        style={{
+          position: 'absolute', inset: 0,
+          background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(16px)',
+        }}
+      />
       <motion.form
         initial={{ opacity: 0, scale: 0.95, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -117,6 +125,7 @@ export const ExpenseModal = ({ tripId, tripName, onClose }: Props) => {
         transition={{ duration: 0.22, ease: EO }}
         onClick={e => e.stopPropagation()} onSubmit={submit}
         style={{
+          position: 'relative', zIndex: 1, pointerEvents: 'all',
           width: '100%', maxWidth: '440px',
           background: 'rgba(14,18,16,0.97)',
           border: '1px solid rgba(156,174,169,0.18)',
@@ -175,6 +184,6 @@ export const ExpenseModal = ({ tripId, tripName, onClose }: Props) => {
           </button>
         </div>
       </motion.form>
-    </motion.div>
+    </div>
   );
 };
