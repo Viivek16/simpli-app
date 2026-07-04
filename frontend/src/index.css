@@ -181,3 +181,161 @@ button:focus-visible, input:focus-visible {
     transform: translateY(0);
   }
 }
+
+/* Mobile specific elements hidden on desktop */
+.mobile-ledger-btn, .mobile-ledger-close {
+  display: none;
+}
+
+/* RESPONSIVE LAYOUTS */
+/* Tablet (769px - 1200px) */
+@media (max-width: 1200px) {
+  .insights-panel {
+    right: 20px !important;
+    width: 340px !important;
+    z-index: 21 !important; /* overlay right panel */
+  }
+  
+  /* Sidebar width 300px for tablet */
+  .right-panel-glass {
+    width: 300px !important;
+  }
+}
+
+/* Phone (<=768px) */
+@media (max-width: 768px) {
+  .insights-panel {
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    border-radius: 0 !important;
+    z-index: 40 !important;
+  }
+
+  /* Right panel becomes bottom sheet */
+  .right-panel-glass {
+    top: auto !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-height: 62vh !important;
+    border-radius: 24px 24px 0 0 !important;
+    z-index: 20 !important;
+    transform: translateY(100%);
+    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .right-panel-glass.mobile-open {
+    transform: translateY(0);
+  }
+
+  .mobile-ledger-btn {
+    display: flex !important;
+    position: fixed;
+    bottom: 24px;
+    right: 16px;
+    z-index: 18;
+    padding: 12px 20px;
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  .mobile-ledger-close {
+    display: block !important;
+  }
+
+  /* Handle for bottom sheet */
+  .right-panel-glass::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 4px;
+    z-index: 10;
+  }
+
+  /* Top bar condenses */
+  .top-bar-container {
+    flex-wrap: nowrap !important;
+  }
+  .top-bar-container .top-bar-left {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+  .top-bar-container .top-bar-center {
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+  .top-bar-container .top-bar-right {
+    min-width: 0;
+    flex: 0 1 auto;
+    margin-left: auto;
+  }
+  .top-bar-container .top-bar-center .glass-pill {
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Invite and Add expense side by side */
+  .trip-actions-container {
+    position: fixed;
+    bottom: 24px;
+    left: 16px;
+    right: 16px;
+    display: flex;
+    justify-content: space-between;
+    z-index: 19;
+  }
+  .trip-actions-container > button {
+    width: 48%;
+  }
+
+  /* When bottom sheet is open, push actions above it */
+  body.bottom-sheet-open .trip-actions-container {
+    bottom: calc(62vh + 16px);
+  }
+
+  /* Create bar on home */
+  .home-create-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .home-create-bar input {
+    width: 100% !important;
+  }
+  .home-create-bar button {
+    width: 40% !important;
+    margin-top: 12px;
+    align-self: flex-start;
+  }
+
+  /* Expense modal full width minus 16px insets */
+  .expense-modal-container {
+    width: calc(100vw - 32px) !important;
+    max-width: none !important;
+  }
+
+  /* Star callout max width */
+  .star-callout-panel {
+    max-width: 78vw !important;
+  }
+  
+  /* Font clamping */
+  html {
+    font-size: clamp(14px, 4vw, 16px);
+  }
+}

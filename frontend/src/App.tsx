@@ -12,6 +12,7 @@ import { useExpense, useExpenseSplit, useUser } from './module_bindings/hooks';
 import type { Expense, ExpenseSplit } from './module_bindings/types';
 import { useTrip, type Trip } from './hooks/useTrips';
 import { useTripMember } from './hooks/useTrips';
+import { buildOwesMap, pairNet } from './lib/ledger';
 import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground } from './components/GalaxyBackground';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -75,16 +76,25 @@ interface EditPayload {
 }
 
 const TripRoom = ({
-  trip, onBack, profile, onOverlayChange, selectedMemberId, onStarClick
+  trip, onBack, profile, onOverlayChange, selectedMemberId, onStarClick, selectedStarPos
 }: {
   trip: Trip; onBack: () => void; profile: GoogleProfile;
   onOverlayChange: (v: boolean) => void; selectedMemberId: string | null; onStarClick: (id: string | null) => void;
+  selectedStarPos: { x: number, y: number } | null;
 }) => {
   const [showModal, setShowModal] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
   const [editPayload, setEditPayload] = useState<EditPayload | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showDeleteTrip, setShowDeleteTrip] = useState(false);
   const [deleteExpenseLoading, setDeleteExpenseLoading] = useState<string | null>(null);
+  const [mobileLedgerOpen, setMobileLedgerOpen] = useState(false);
+
+  useEffect(() => {
+    if (mobileLedgerOpen) document.body.classList.add('bottom-sheet-open');
+    else document.body.classList.remove('bottom-sheet-open');
+    return () => document.body.classList.remove('bottom-sheet-open');
+  }, [mobileLedgerOpen]);
 
   const expenses = useExpense();
   const splits = useExpenseSplit();
@@ -215,39 +225,61 @@ const TripRoom = ({
     return groups;
   }, [tripExpenses]);
 
+  const owes = useMemo(() => buildOwesMap(tripExpenses, splits), [tripExpenses, splits]);
+
   const memberBalances = useMemo(() => {
     if (!selectedMemberId) return null;
-    const balances = new Map<string, number>();
-    tripMembers.forEach(m => {
-       if (m.id !== selectedMemberId) balances.set(m.id, 0);
-    });
-
-    tripExpenses.forEach(exp => {
-      const payer = norm(exp.payerId);
-      const expSplits = splits.filter(s => s.expenseId === exp.id);
-      
-      expSplits.forEach(s => {
-        const debtor = norm(s.debtorId);
-        if (payer === debtor) return;
-        
-        if (payer === selectedMemberId && debtor !== selectedMemberId) {
-          const current = balances.get(debtor) || 0;
-          balances.set(debtor, current + s.amountOwed);
-        } else if (debtor === selectedMemberId && payer !== selectedMemberId) {
-          const current = balances.get(payer) || 0;
-          balances.set(payer, current - s.amountOwed);
-        }
-      });
-    });
-
     const result: { otherId: string; amount: number }[] = [];
     let net = 0;
-    balances.forEach((amt, otherId) => {
-      net += amt;
-      if (Math.abs(amt) > 0.01) result.push({ otherId, amount: amt });
+    tripMembers.forEach(m => {
+      if (m.id === selectedMemberId) return;
+      const amount = pairNet(owes, selectedMemberId, m.id);
+      net += amount;
+      if (Math.abs(amount) > 0.01) {
+        result.push({ otherId: m.id, amount });
+      }
     });
     return { net, details: result.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount)) };
-  }, [localId, tripExpenses, splits, tripMembers]);
+  }, [selectedMemberId, owes, tripMembers]);
+
+  // Insights Data
+  const insightsData = useMemo(() => {
+    const nonSettlement = tripExpenses.filter(e => e.description !== 'Debt settlement');
+    
+    let totalGroupSpend = 0;
+    const memberPaid = new Map<string, number>();
+    tripMembers.forEach(m => memberPaid.set(m.id, 0));
+    
+    let youSpent = 0;
+    let youOwedBack = 0;
+    const yourExpenses: { id: string, desc: string, amount: number, owedBack: number }[] = [];
+
+    nonSettlement.forEach(exp => {
+      totalGroupSpend += exp.amount;
+      const payer = norm(exp.payerId);
+      memberPaid.set(payer, (memberPaid.get(payer) || 0) + exp.amount);
+      
+      if (payer === localId) {
+        const expSplits = splits.filter(s => s.expenseId === exp.id);
+        let owedBack = 0;
+        expSplits.forEach(s => {
+           if (norm(s.debtorId) !== localId) owedBack += s.amountOwed;
+        });
+        yourExpenses.push({
+          id: exp.id, desc: exp.description, amount: exp.amount, owedBack
+        });
+        youSpent += exp.amount;
+        youOwedBack += owedBack;
+      }
+    });
+
+    const groupBreakdown = tripMembers.map(m => ({
+      name: m.id === localId ? 'You' : (m.name.split(' ')[0]),
+      paid: memberPaid.get(m.id) || 0
+    })).filter(x => x.paid > 0).sort((a, b) => b.paid - a.paid);
+
+    return { totalGroupSpend, groupBreakdown, yourExpenses, youSpent, youOwedBack };
+  }, [tripExpenses, splits, tripMembers, localId]);
 
   // B1: Contextual balance header
   const headerContext = useMemo(() => {
@@ -334,15 +366,38 @@ const TripRoom = ({
         </button>
       </div>
 
+      <button 
+        className="glass-pill mobile-ledger-btn"
+        onClick={() => setMobileLedgerOpen(true)}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        Ledger
+      </button>
+
       {/* Right panel — Ledger */}
-      <div className="glass-panel" style={{
+      <div className={`glass-panel right-panel-glass ${mobileLedgerOpen ? 'mobile-open' : ''}`} style={{
         pointerEvents: 'all', position: 'absolute', top: 72, right: 20, bottom: 24,
         width: '340px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
         background: 'rgba(5, 6, 10, 0.65)', borderRadius: '18px'
       }}>
         <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            {headerContext.type === 'overall' ? 'Your Balance' : `${headerContext.name}'s Balance with you`}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {headerContext.type === 'overall' ? 'Your Balance' : `${headerContext.name}'s Balance with you`}
+              <button className="mobile-ledger-close" onClick={() => setMobileLedgerOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px' }}>&times;</button>
+            </div>
+            <button
+              onClick={() => setShowInsights(!showInsights)}
+              className="btn-ghost"
+              style={{
+                padding: '6px', color: showInsights ? 'var(--text)' : 'var(--text-dim)',
+                borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: showInsights ? 'rgba(255,255,255,0.1)' : 'transparent', border: '1px solid', borderColor: showInsights ? 'rgba(255,255,255,0.1)' : 'transparent'
+              }}
+              title="Insights"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            </button>
           </div>
           <div className="money" style={{ fontSize: '1.2rem', fontWeight: 600, color: headerContext.amount === 0 ? 'var(--text-dim)' : headerContext.amount > 0 ? 'var(--owed)' : 'var(--owe)' }}>
             {headerContext.amount === 0 ? (headerContext.type === 'overall' ? 'Settled up' : `Settled with ${headerContext.name}`) : (headerContext.amount > 0 ? (headerContext.type === 'overall' ? `You're owed ${INR(Math.abs(headerContext.amount))}` : `${headerContext.name} owes you ${INR(Math.abs(headerContext.amount))}`) : (headerContext.type === 'overall' ? `You owe ${INR(Math.abs(headerContext.amount))}` : `You owe ${headerContext.name} ${INR(Math.abs(headerContext.amount))}`))}
@@ -481,6 +536,84 @@ const TripRoom = ({
         </div>
       </div>
 
+      {/* Insights panel */}
+      <AnimatePresence>
+        {showInsights && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
+            className="glass-panel insights-panel"
+            style={{
+              pointerEvents: 'all', position: 'absolute', top: 72, bottom: 24,
+              display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              background: 'rgba(5, 6, 10, 0.85)', borderRadius: '18px', zIndex: 19
+            }}
+          >
+            <div style={{ padding: '20px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span className="font-clash" style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text)' }}>Insights</span>
+              <button onClick={() => setShowInsights(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '1.4rem', lineHeight: 1 }}>&times;</button>
+            </div>
+            
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Your Spend</div>
+                {insightsData.yourExpenses.length === 0 ? (
+                  <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>You haven't paid for anything yet.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {insightsData.yourExpenses.map(exp => (
+                      <div key={exp.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: '0.9rem', color: 'var(--text)', fontWeight: 500 }}>{exp.desc}</div>
+                          <div style={{ fontSize: '0.75rem', color: exp.owedBack > 0 ? 'var(--owed)' : 'var(--text-dim)' }}>
+                            {exp.owedBack > 0 ? `${INR(exp.owedBack)} owed back to you` : 'Personal'}
+                          </div>
+                        </div>
+                        <div className="money" style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)' }}>
+                          {INR(exp.amount)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <div style={{ marginTop: '4px', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-dim)' }}>
+                    <span>You spent</span>
+                    <span className="money" style={{ color: 'var(--text)', fontWeight: 600 }}>{INR(insightsData.youSpent)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: 'var(--text-dim)' }}>
+                    <span>Owed back to you</span>
+                    <span className="money" style={{ color: 'var(--owed)', fontWeight: 600 }}>{INR(insightsData.youOwedBack)}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Group Spend</div>
+                <div style={{ padding: '16px', background: 'var(--glass)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', borderBottom: '1px solid var(--glass-brd)', paddingBottom: '12px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Total group expenditure</span>
+                    <span className="money" style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text)' }}>{INR(insightsData.totalGroupSpend)}</span>
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {insightsData.groupBreakdown.map(m => (
+                      <div key={m.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                        <span style={{ color: 'var(--text-dim)' }}>{m.name} paid</span>
+                        <span className="money" style={{ fontWeight: 600, color: 'var(--text)' }}>{INR(m.paid)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Modals */}
       <AnimatePresence>
         {showModal && (
@@ -536,14 +669,18 @@ const TripRoom = ({
       </AnimatePresence>
       {/* B3: DOM Popup for selected star */}
       <AnimatePresence>
-        {selectedMemberId && (
+        {selectedMemberId && selectedStarPos && (
           <motion.div
-            initial={{ opacity: 0, x: 20, scale: 0.95 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 20, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
             transition={{ type: 'spring', damping: 24, stiffness: 350 }}
             style={{
-              position: 'fixed', top: '50%', right: '380px', transform: 'translateY(-50%)',
+              position: 'fixed',
+              top: Math.max(20, Math.min(window.innerHeight - 250, selectedStarPos.y - 100)),
+              left: selectedStarPos.x > window.innerWidth * 0.66
+                ? Math.max(20, selectedStarPos.x - 244)
+                : Math.min(window.innerWidth - 240, selectedStarPos.x + 24),
               background: 'rgba(10, 12, 16, 0.85)', backdropFilter: 'blur(20px)',
               border: '1px solid rgba(255,255,255,0.15)', borderRadius: '12px',
               padding: '20px', width: '220px', zIndex: 30,
@@ -551,7 +688,19 @@ const TripRoom = ({
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', pointerEvents: 'all'
             }}
           >
-            <div style={{ position: 'absolute', top: '50%', left: '-6px', transform: 'translateY(-50%) rotate(45deg)', width: '12px', height: '12px', background: 'rgba(10, 12, 16, 0.85)', borderBottom: '1px solid rgba(255,255,255,0.15)', borderLeft: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(20px)' }} />
+            <div style={{
+              position: 'absolute',
+              top: Math.max(12, Math.min(188, selectedStarPos.y - Math.max(20, Math.min(window.innerHeight - 250, selectedStarPos.y - 100)) - 6)),
+              left: selectedStarPos.x > window.innerWidth * 0.66 ? 'auto' : '-6px',
+              right: selectedStarPos.x > window.innerWidth * 0.66 ? '-6px' : 'auto',
+              transform: 'rotate(45deg)', width: '12px', height: '12px',
+              background: 'rgba(10, 12, 16, 0.85)',
+              borderBottom: selectedStarPos.x > window.innerWidth * 0.66 ? 'none' : '1px solid rgba(255,255,255,0.15)',
+              borderLeft: selectedStarPos.x > window.innerWidth * 0.66 ? 'none' : '1px solid rgba(255,255,255,0.15)',
+              borderTop: selectedStarPos.x > window.innerWidth * 0.66 ? '1px solid rgba(255,255,255,0.15)' : 'none',
+              borderRight: selectedStarPos.x > window.innerWidth * 0.66 ? '1px solid rgba(255,255,255,0.15)' : 'none',
+              backdropFilter: 'blur(20px)'
+            }} />
             <button onClick={() => onStarClick(null)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1 }}>&times;</button>
             <div style={{ width: '100%', textAlign: 'center', marginTop: '8px' }}>
               <div style={{ color: 'var(--text)', fontSize: '1.1rem', fontWeight: 700, fontFamily: 'Satoshi, sans-serif' }}>
@@ -812,6 +961,7 @@ function App() {
   const [subReady, setSubReady] = useState(StDB.subscriptionApplied);
   const [hoveredStar, setHoveredStar] = useState<string | null>(null);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [selectedStarPos, setSelectedStarPos] = useState<{ x: number, y: number } | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const isConnected = useIsConnected();
   const trips = useTrip();
@@ -923,6 +1073,8 @@ function App() {
           hoveredStar={hoveredStar}
           onStarHover={setHoveredStar}
           onStarClick={setSelectedMemberId}
+          selectedMemberId={selectedMemberId}
+          onSelectedStarPosUpdate={setSelectedStarPos}
         />
       </ErrorBoundary>
 
@@ -941,6 +1093,7 @@ function App() {
                   onOverlayChange={setOverlayOpen}
                   selectedMemberId={selectedMemberId}
                   onStarClick={setSelectedMemberId}
+                  selectedStarPos={selectedStarPos}
                 />
               ) : (
                 <Dashboard

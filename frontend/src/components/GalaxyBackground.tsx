@@ -12,7 +12,7 @@
  *
  * Phase 2.1: camera flies to galaxy world position, galaxy color stable via trip.id hash
  */
-import { useMemo, useRef, useState, useEffect } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Points, PointMaterial, OrbitControls, Html, Preload } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
@@ -23,6 +23,7 @@ import type { Trip } from '../hooks/useTrips';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import * as StDB from '../spacetimedb';
 import { AudioService } from '../audio';
+import { buildOwesMap, pairNet } from '../lib/ledger';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 
@@ -61,7 +62,6 @@ const hashId = (id: string): number => {
 const tripColor = (id: string) => PALETTE[hashId(id) % PALETTE.length];
 
 // ─── Macro galaxy particle cloud ──────────────────────────────────────────────
-const PARTICLE_COUNT = 7500;
 let sharedGlowTex: THREE.CanvasTexture | null = null;
 
 const SwirlingGalaxy = ({
@@ -80,6 +80,8 @@ const SwirlingGalaxy = ({
   if (!sharedGlowTex) sharedGlowTex = createGlowTexture();
 
   const { positions, colors, coreColor, edgeColor } = useMemo(() => {
+    const isPhone = typeof window !== 'undefined' && window.innerWidth <= 768;
+    const PARTICLE_COUNT = isPhone ? 2500 : 4500;
     const p = new Float32Array(PARTICLE_COUNT * 3);
     const c = new Float32Array(PARTICLE_COUNT * 3);
     const cCore = new THREE.Color(colorCoreStr);
@@ -108,7 +110,7 @@ const SwirlingGalaxy = ({
       
       const intensity = Math.max(0, 1 - Math.pow(radius / 9, 1.2));
       temp.lerpColors(cEdge, cCore, intensity);
-      if (radius < 2.5) temp.lerp(white, (1 - radius / 2.5) * 0.85);
+      if (radius < 2.5) temp.lerp(white, (1 - radius / 2.5) * 0.75);
       
       c[i * 3] = temp.r; c[i * 3 + 1] = temp.g; c[i * 3 + 2] = temp.b;
     }
@@ -148,13 +150,13 @@ const SwirlingGalaxy = ({
       const s = 0.96 + e * (targetScale - 0.96);
       ref.current.scale.set(s, s, s);
       mat.opacity = e * targetOpacity;
-      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.22 / Math.max(targetOpacity, 0.001));
-      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.08 / Math.max(targetOpacity, 0.001));
+      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.16 / Math.max(targetOpacity, 0.001));
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.06 / Math.max(targetOpacity, 0.001));
     } else {
       ref.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.04);
       mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
-      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.22 / Math.max(targetOpacity, 0.001));
-      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.08 / Math.max(targetOpacity, 0.001));
+      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.16 / Math.max(targetOpacity, 0.001));
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.06 / Math.max(targetOpacity, 0.001));
     }
   });
 
@@ -169,14 +171,14 @@ const SwirlingGalaxy = ({
         >
           <PointMaterial
             transparent vertexColors
-            size={0.12}
+            size={0.138}
             sizeAttenuation depthWrite={false}
             opacity={0}
             blending={THREE.AdditiveBlending} toneMapped={false}
           />
         </Points>
         {/* Core Glow */}
-        <sprite ref={spriteRef1} scale={[3.5, 3.5, 1]} position={[0, 0, 0]}>
+        <sprite ref={spriteRef1} scale={[3.2, 3.2, 1]} position={[0, 0, 0]}>
           <spriteMaterial map={sharedGlowTex} color={coreColor} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
         </sprite>
         {/* Nebula Haze */}
@@ -255,7 +257,7 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
   useFrame((_, delta) => {
     if (!ref.current) return;
     const mat = ref.current.material as THREE.PointsMaterial;
-    const targetOpacity = activeTripId ? 0 : 0.4;
+    const targetOpacity = activeTripId ? 0 : 0.22;
     mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
     ref.current.rotation.y += delta * 0.018; // slow global drift
     ref.current.rotation.x += delta * 0.004;
@@ -266,7 +268,7 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
 
   return (
     <Points ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}>
-      <PointMaterial transparent vertexColors size={0.35} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
+      <PointMaterial transparent vertexColors size={0.3} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
     </Points>
   );
 };
@@ -309,23 +311,18 @@ const CameraAnimator = ({
 
 interface HoveredGalaxy { id: string; pos: THREE.Vector3 }
 
-interface GalaxyCameraControllerProps {
+// Wrapper to share state between the canvas and the DOM
+const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, tripBalances, selectedMemberId, onSelectedStarPosUpdate }: {
   activeTripId: string | null;
   trips: Trip[];
   onSelectTrip: (t: Trip) => void;
-}
-
-// Wrapper to share state between the canvas and the DOM
-const GalaxyScene = ({
-  activeTripId, trips, onSelectTrip, uiPaused,
-  hoveredStar, onStarHover, onStarClick,
-  tripBalances
-}: GalaxyCameraControllerProps & {
   uiPaused: boolean;
   hoveredStar: string | null;
   onStarHover: (id: string | null) => void;
   onStarClick: (id: string | null) => void;
   tripBalances: Record<string, { settled: boolean, netBalances: { owes: string, owed: string, amtOwes: number, amtOwed: number } | null }>;
+  selectedMemberId?: string | null;
+  onSelectedStarPosUpdate?: (pos: { x: number, y: number } | null) => void;
 }) => {
   const hoveredGalaxy = null as HoveredGalaxy | null; // phase 2: hover state
   const [settling, setSettling] = useState(false);
@@ -337,7 +334,7 @@ const GalaxyScene = ({
     if (activeTripId) {
       const activeTripIndex = trips.findIndex(t => t.id === activeTripId);
       const angle = (activeTripIndex / Math.max(trips.length, 1)) * Math.PI * 2;
-      const r = Math.max(8, 6 + trips.length * 1.2);
+      const r = Math.max(6.5, 5 + trips.length * 1.0);
       const pos = new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
       
       targetPos.current = new THREE.Vector3(pos.x, pos.y + 4, pos.z + 12);
@@ -345,7 +342,7 @@ const GalaxyScene = ({
       const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
     } else {
-      targetPos.current = new THREE.Vector3(0, 7, 19);
+      targetPos.current = new THREE.Vector3(0, 6, 16);
       setSettling(true); setSettled(false);
       const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
@@ -356,7 +353,7 @@ const GalaxyScene = ({
   const tripPositions = useMemo(() => {
     return trips.map((trip, idx) => {
       const angle = (idx / Math.max(trips.length, 1)) * Math.PI * 2;
-      const r = Math.max(8, 6 + trips.length * 1.2);
+      const r = Math.max(6.5, 5 + trips.length * 1.0);
       return {
         trip,
         pos: new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r),
@@ -391,6 +388,8 @@ const GalaxyScene = ({
             hoveredStar={hoveredStar}
             onStarHover={onStarHover}
             onStarClick={onStarClick}
+            selectedMemberId={selectedMemberId}
+            onSelectedStarPosUpdate={onSelectedStarPosUpdate}
             settling={settling && !settled}
           />
         )}
@@ -418,7 +417,12 @@ const GalaxyScene = ({
       </ErrorBoundary>
 
       <EffectComposer>
-        <Bloom luminanceThreshold={0.2} mipmapBlur luminanceSmoothing={0.9} intensity={0.7} />
+        <Bloom 
+          luminanceThreshold={0.2} 
+          mipmapBlur 
+          luminanceSmoothing={0.9} 
+          intensity={(typeof window !== 'undefined' && window.innerWidth <= 768) ? 0.45 : 0.55} 
+        />
       </EffectComposer>
     </>
   );
@@ -445,9 +449,11 @@ interface GBProps {
   hoveredStar: string | null;
   onStarHover: (id: string | null) => void;
   onStarClick: (id: string | null) => void;
+  selectedMemberId?: string | null;
+  onSelectedStarPosUpdate?: (pos: { x: number, y: number } | null) => void;
 }
 
-export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick }: GBProps) => {
+export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, selectedMemberId, onSelectedStarPosUpdate }: GBProps) => {
   const expenses = useExpense();
   const splits = useExpenseSplit();
   const allUsers = useUser();
@@ -465,7 +471,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
     const res: Record<string, { settled: boolean, netBalances: { owes: string, owed: string, amtOwes: number, amtOwed: number } | null }> = {};
     trips.forEach(trip => {
       const tripExp = expenses.filter(e => e.tripId === trip.id);
-      const netPair: Record<string, Record<string, number>> = {};
+      const owes = buildOwesMap(tripExp, splits);
       const netUser: Record<string, number> = {};
 
       tripExp.forEach(exp => {
@@ -474,14 +480,6 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
           const debtor = norm(s.debtorId);
           netUser[payer] = (netUser[payer] || 0) + s.amountOwed;
           netUser[debtor] = (netUser[debtor] || 0) - s.amountOwed;
-
-          if (payer !== debtor) {
-            if (!netPair[debtor]) netPair[debtor] = {};
-            netPair[debtor][payer] = (netPair[debtor][payer] || 0) + s.amountOwed;
-            
-            if (!netPair[payer]) netPair[payer] = {};
-            netPair[payer][debtor] = (netPair[payer][debtor] || 0) - s.amountOwed;
-          }
         });
       });
 
@@ -496,11 +494,15 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
         // Find biggest pairwise balance for local user
         let amtOwed = 0; let owedBy = '';
         let amtOwes = 0; let owesTo = '';
-        const myPairs = netPair[localId] || {};
-        for (const [otherId, amt] of Object.entries(myPairs)) {
-          if (amt < -0.5 && Math.abs(amt) > amtOwed) { amtOwed = Math.abs(amt); owedBy = m.get(otherId) || 'Member'; }
-          if (amt > 0.5 && amt > amtOwes) { amtOwes = amt; owesTo = m.get(otherId) || 'Member'; }
-        }
+        
+        allUsers.forEach(u => {
+          const otherId = norm((typeof u.id === 'object' && u.id && 'toHexString' in u.id) ? u.id.toHexString() : u.id);
+          if (otherId === localId) return;
+          const amt = pairNet(owes, localId, otherId);
+          if (amt > 0.5 && amt > amtOwed) { amtOwed = amt; owedBy = m.get(otherId) || 'Member'; }
+          if (amt < -0.5 && Math.abs(amt) > amtOwes) { amtOwes = Math.abs(amt); owesTo = m.get(otherId) || 'Member'; }
+        });
+        
         res[trip.id] = { settled: false, netBalances: (amtOwed > 0 || amtOwes > 0) ? { owes: owesTo, owed: owedBy, amtOwes, amtOwed } : null };
       }
     });
@@ -514,7 +516,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
     }}>
       <ErrorBoundary fallback={<CosmosFallback trips={trips} onSelectTrip={onSelectTrip} />}>
         <Canvas
-          camera={{ position: [0, 7, 19], fov: 50 }}
+          camera={{ position: [0, 6, 16], fov: 50 }}
           dpr={[1, 1.5]}
           frameloop={uiPaused ? 'never' : 'always'}
           style={{ pointerEvents: uiPaused ? 'none' : 'all' }}
@@ -528,6 +530,8 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
             hoveredStar={hoveredStar}
             onStarHover={onStarHover}
             onStarClick={onStarClick}
+            selectedMemberId={selectedMemberId}
+            onSelectedStarPosUpdate={onSelectedStarPosUpdate}
             tripBalances={tripBalances}
           />
         </Canvas>

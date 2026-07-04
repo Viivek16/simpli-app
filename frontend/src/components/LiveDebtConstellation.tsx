@@ -8,14 +8,15 @@
  * - Star halo = cheap additive-blending sprite, not a large transparent sphere
  */
 import { useMemo, useRef, useEffect } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Html, Line } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
 import { motion } from 'framer-motion';
 import * as THREE from 'three';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import { useTripMember } from '../hooks/useTrips';
 import * as StDB from '../spacetimedb';
 import { AudioService } from '../audio';
+import { buildOwesMap } from '../lib/ledger';
 
 const INR = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
@@ -37,9 +38,10 @@ interface LDCProps {
   onStarClick: (id: string | null) => void;
   selectedMemberId?: string | null;
   settling?: boolean;
+  onSelectedStarPosUpdate?: (pos: { x: number, y: number } | null) => void;
 }
 
-export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar, onStarHover, onStarClick, selectedMemberId, settling: _settling }: LDCProps) => {
+export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar, onStarHover, onStarClick, selectedMemberId, settling: _settling, onSelectedStarPosUpdate }: LDCProps) => {
   const allUsers = useUser();
   const tripMemberIds = useTripMember(activeTripId);
   const splits = useExpenseSplit();
@@ -90,19 +92,9 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
 
   // Pairwise owes map: owes[a][b] = a owes b this amount
   const owes = useMemo(() => {
-    const map: Record<string, Record<string, number>> = {};
-    members.forEach(m => { map[m.id] = {}; });
-    splits.forEach(split => {
-      const exp = expenses.find(e => e.id === split.expenseId && e.tripId === activeTripId);
-      if (!exp) return;
-      const debtor = norm(split.debtorId);
-      const payee = norm(exp.payerId);
-      if (debtor !== payee && map[debtor] !== undefined) {
-        map[debtor][payee] = (map[debtor][payee] || 0) + split.amountOwed;
-      }
-    });
-    return map;
-  }, [members, splits, expenses, activeTripId]);
+    const tripExpenses = expenses.filter(e => e.tripId === activeTripId);
+    return buildOwesMap(tripExpenses, splits);
+  }, [splits, expenses, activeTripId]);
 
   const maxNetDebt = useMemo(() => {
     let max = 0;
@@ -157,8 +149,13 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
     return texture;
   }, []);
 
+  const { camera, size } = useThree();
+  const tickRef = useRef(0);
+  const lastPos = useRef({ x: 0, y: 0, id: '' });
+
   // B1: Smooth Fly-in & Living Constellation (drift/bob)
   useFrame((_, delta) => {
+    tickRef.current++;
     if (!ref.current) return;
     ref.current.rotation.y += delta * 0.06;            // continuous slow orbit
     const t = performance.now() / 1000;
@@ -168,6 +165,24 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
         if (typeof baseY === 'number') child.position.y = baseY + Math.sin(t * 0.9 + child.userData.seed) * 0.25;
       }
     });
+
+    if (selectedMemberId && onSelectedStarPosUpdate && tickRef.current % 2 === 0) {
+      let groupObj = ref.current.children.find(c => c.name === 'star-group' && c.userData.nodeId === selectedMemberId);
+      if (groupObj) {
+         const pos = new THREE.Vector3();
+         groupObj.getWorldPosition(pos);
+         pos.project(camera);
+         const x = Math.round((pos.x * 0.5 + 0.5) * size.width);
+         const y = Math.round(-(pos.y * 0.5 - 0.5) * size.height);
+         if (x !== lastPos.current.x || y !== lastPos.current.y || lastPos.current.id !== selectedMemberId) {
+            lastPos.current = { x, y, id: selectedMemberId };
+            onSelectedStarPosUpdate({ x, y });
+         }
+      }
+    } else if (!selectedMemberId && lastPos.current.id !== '') {
+       lastPos.current = { x: 0, y: 0, id: '' };
+       if (onSelectedStarPosUpdate) onSelectedStarPosUpdate(null);
+    }
 
     if (ref.current.userData.fade === undefined) {
       ref.current.userData.fade = 0;
@@ -223,7 +238,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
         const isSelected = selectedMemberId === node.id;
 
         return (
-          <group key={node.id} position={node.position} name="star-group" userData={{ baseY: node.position.y, seed: i * 2.1 }}>
+          <group key={node.id} position={node.position} name="star-group" userData={{ baseY: node.position.y, seed: i * 2.1, nodeId: node.id }}>
             {/* Invisible hit target for clicks */}
             <mesh
               onClick={(e) => { e.stopPropagation(); AudioService.playBlip(); onStarClick(node.id); }}
