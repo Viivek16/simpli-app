@@ -135,6 +135,23 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
 
   if (!activeTripId) return null;
 
+  // Create radial gradient texture for the halos
+  const haloTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext('2d')!;
+    const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.55)');
+    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.18)');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 64, 64);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, []);
+
   return (
     <group>
       {/* Stars */}
@@ -142,16 +159,11 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
         const isLocal = node.id === localId;
         const settled = Math.abs(node.netDebt) < 0.5;
         const ratio = Math.min(Math.abs(node.netDebt) / maxNetDebt, 1);
-        const color = isLocal ? '#FF7A1A' : '#22D3EE';
-        const isHovered = hoveredStar === node.id;
+        const color = isLocal ? '#FFB74D' : '#5EE6FF';
 
         // Emissive scales with debt ratio per spec
         const emissiveIntensity = settled ? 0.4 : (1.4 + ratio * 4.5);
         const coreColor = settled ? '#9aa0aa' : color;
-
-        // Halo: scale and opacity scale with debt
-        const haloScale = settled ? 0 : (1.6 + ratio * 1.6) * (isHovered ? 1.2 : 1.0);
-        const haloOpacity = settled ? 0 : (0.18 + ratio * 0.3);
 
         const labelColor = settled ? '#6b7280' : node.netDebt < 0 ? '#d98a6c' : '#6fba8a';
 
@@ -174,15 +186,28 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
               />
             </mesh>
 
-            {/* Additive halo sprite — glow without expensive transparent spheres */}
-            {!settled && haloScale > 0 && (
-              <mesh>
-                <sphereGeometry args={[0.42 * haloScale, 16, 16]} />
-                <meshBasicMaterial
-                  color={color} transparent opacity={haloOpacity}
-                  blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false}
-                />
-              </mesh>
+            {/* Layered additive halo sprites */}
+            {!settled && (
+              <group>
+                {/* Inner bright halo */}
+                <sprite scale={[1.8 + ratio * 2.2, 1.8 + ratio * 2.2, 1]}>
+                  <spriteMaterial
+                    map={haloTexture}
+                    color={color}
+                    transparent opacity={0.16 + ratio * 0.30}
+                    blending={THREE.AdditiveBlending} depthWrite={false}
+                  />
+                </sprite>
+                {/* Outer soft halo */}
+                <sprite scale={[3.0 + ratio * 3.5, 3.0 + ratio * 3.5, 1]}>
+                  <spriteMaterial
+                    map={haloTexture}
+                    color={color}
+                    transparent opacity={(0.16 + ratio * 0.30) * 0.4}
+                    blending={THREE.AdditiveBlending} depthWrite={false}
+                  />
+                </sprite>
+              </group>
             )}
 
             {/* Point light to illuminate nearby lines */}
@@ -199,22 +224,23 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
             )}
 
             {/* Label */}
-            <Html center distanceFactor={12} style={{ pointerEvents: 'none', userSelect: 'none' }}>
-              <div style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+            <Html center distanceFactor={14} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+              <div className="glass-pill" style={{
+                textAlign: 'center', whiteSpace: 'nowrap', padding: '6px 14px', marginTop: '64px',
+                background: 'rgba(5,6,10,0.6)', border: '1px solid var(--glass-brd)'
+              }}>
                 <motion.div
-                  animate={isSolo ? { scale: [1, 1.07, 1] } : { scale: 1 }}
+                  animate={isSolo ? { scale: [1, 1.05, 1] } : { scale: 1 }}
                   transition={isSolo ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } : {}}
                 >
                   <div style={{
-                    color: 'rgba(255,255,255,0.92)', fontSize: '0.82rem', fontWeight: 600,
-                    textShadow: '0 2px 6px rgba(0,0,0,1)', marginTop: '44px',
-                    fontFamily: 'Inter, system-ui, sans-serif',
+                    color: 'var(--text)', fontSize: '0.85rem', fontWeight: 600,
+                    fontFamily: 'Satoshi, sans-serif'
                   }}>
                     {isLocal ? 'You' : node.name}
                   </div>
-                  <div style={{
-                    color: labelColor, fontSize: '0.7rem', fontWeight: 700, marginTop: '2px',
-                    fontVariantNumeric: 'tabular-nums',
+                  <div className="money" style={{
+                    color: labelColor, fontSize: '0.75rem', fontWeight: 700, marginTop: '2px',
                   }}>
                     {settled ? 'Settled' : (node.netDebt > 0 ? '+' : '') + INR(node.netDebt)}
                   </div>
@@ -248,16 +274,17 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
 
           const r = amount / maxPairDebt;
           const dimmed = hoveredStar && hoveredStar !== a.id && hoveredStar !== b.id;
-          const lineColor = new THREE.Color('#22D3EE').lerp(new THREE.Color('#FF3D81'), r);
+          const lineColor = '#FFFFFF';
+          const lineOpacity = dimmed ? 0.3 : (0.22 + r * 0.5);
 
           return (
             <Line
-              key={`line-${a.id}-${b.id}`}
+              key={`${a.id}-${b.id}`}
               points={[a.position, b.position]}
               color={lineColor}
               lineWidth={1 + r * 5}
               transparent
-              opacity={dimmed ? 0.12 : (0.3 + r * 0.55)}
+              opacity={lineOpacity}
               toneMapped={false}
             />
           );

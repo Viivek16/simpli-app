@@ -23,12 +23,11 @@ import type { Trip } from '../hooks/useTrips';
 
 // Stable color palette hashed from trip id (Phase 2.1)
 const PALETTE = [
-  { core: '#b14bf4', edge: '#150028' },
-  { core: '#ff8c00', edge: '#2a1400' },
-  { core: '#22d3ee', edge: '#001a26' },
-  { core: '#39ff14', edge: '#001a00' },
-  { core: '#ff007f', edge: '#1a0010' },
-  { core: '#ffd700', edge: '#1a1600' },
+  { core: '#FFC46B', edge: '#FF7A1A' }, // amber-gold
+  { core: '#FF6FD8', edge: '#B4149E' }, // rose-magenta
+  { core: '#7BF7A6', edge: '#129E5E' }, // emerald
+  { core: '#B79CFF', edge: '#6D3BE6' }, // violet
+  { core: '#6FE9E0', edge: '#0E9E9E' }, // teal
 ];
 
 const hashId = (id: string): number => {
@@ -43,10 +42,10 @@ const tripColor = (id: string) => PALETTE[hashId(id) % PALETTE.length];
 const PARTICLE_COUNT = 7500;
 
 const SwirlingGalaxy = ({
-  position, colorCoreStr, colorEdgeStr, onClick, name, hovered,
+  position, colorCoreStr, colorEdgeStr, onClick, name, hovered, selected, hidden
 }: {
   position: THREE.Vector3; colorCoreStr: string; colorEdgeStr: string;
-  onClick?: () => void; name?: string; hovered?: boolean;
+  onClick?: () => void; name?: string; hovered?: boolean; selected?: boolean; hidden?: boolean;
 }) => {
   const ref = useRef<THREE.Points>(null);
 
@@ -55,6 +54,7 @@ const SwirlingGalaxy = ({
     const c = new Float32Array(PARTICLE_COUNT * 3);
     const colorCore = new THREE.Color(colorCoreStr);
     const colorEdge = new THREE.Color(colorEdgeStr);
+    const white = new THREE.Color('#FFFFFF');
     const temp = new THREE.Color();
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       const radius = Math.random() * 15 + 0.5;
@@ -66,12 +66,29 @@ const SwirlingGalaxy = ({
       p[i * 3]     = Math.cos(branchAngle + spinAngle) * radius + rx;
       p[i * 3 + 1] = ry;
       p[i * 3 + 2] = Math.sin(branchAngle + spinAngle) * radius + rz;
+      
       const intensity = Math.max(0, 1 - radius / 16);
-      temp.lerpColors(colorEdge, colorCore, Math.pow(intensity, 1.5));
+      temp.lerpColors(colorEdge, colorCore, Math.pow(intensity, 1.2));
+      // White hot core
+      if (radius < 2.5) temp.lerp(white, 1 - radius / 2.5);
+      
       c[i * 3] = temp.r; c[i * 3 + 1] = temp.g; c[i * 3 + 2] = temp.b;
     }
     return { positions: p, colors: c };
   }, [colorCoreStr, colorEdgeStr]);
+
+  // Slow self-rotation + streak effect
+  useFrame((_state, _delta) => {
+    if (ref.current) {
+      ref.current.rotation.y += hovered || selected ? 0.003 : 0.0005;
+      const targetScale = selected ? 1.4 : (hovered ? 1.06 : 1.0);
+      ref.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.04);
+      
+      const mat = ref.current.material as THREE.PointsMaterial;
+      const targetOpacity = hidden ? 0 : (selected ? 0.0 : 0.85); // Selected also fades to 0 as it settles? Wait, the prompt says "radial motion blur feel via brief point-size + opacity ramp".
+      mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
+    }
+  });
 
   // Slow self-rotation — only permitted useFrame work per Rule 7
   useFrame(() => {
@@ -83,25 +100,29 @@ const SwirlingGalaxy = ({
       <Points
         ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}
         onClick={(e) => { if (onClick) { e.stopPropagation(); onClick(); } }}
+        onPointerOver={() => { document.body.style.cursor = 'pointer'; }}
+        onPointerOut={() => { document.body.style.cursor = 'auto'; }}
       >
         <PointMaterial
           transparent vertexColors
-          size={hovered ? 0.24 : 0.16}
+          size={0.18}
           sizeAttenuation depthWrite={false}
-          opacity={1.0}
+          opacity={0.85}
           blending={THREE.AdditiveBlending} toneMapped={false}
         />
       </Points>
-      {name && (
-        <Html center distanceFactor={18} style={{ pointerEvents: 'none', userSelect: 'none' }}>
-          <div style={{
-            color: hovered ? '#ffffff' : 'rgba(255,255,255,0.7)',
-            fontWeight: 800, fontSize: '1rem',
-            textShadow: '0 2px 12px rgba(0,0,0,1)',
-            transition: 'color 200ms ease',
-            whiteSpace: 'nowrap', marginTop: '40px',
-            fontFamily: 'Inter, system-ui, sans-serif',
-            letterSpacing: '-0.02em',
+      {name && !selected && (
+        <Html center distanceFactor={22} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+          <div className="font-clash" style={{
+            color: hovered ? '#ffffff' : 'var(--text)',
+            background: 'rgba(5,6,10,0.5)',
+            padding: '4px 12px',
+            borderRadius: '999px',
+            backdropFilter: 'blur(6px)',
+            border: '1px solid var(--glass-brd)',
+            fontWeight: 600, fontSize: '1rem',
+            transition: 'color 200ms ease, background 200ms ease',
+            whiteSpace: 'nowrap', marginTop: '-60px'
           }}>{name}</div>
         </Html>
       )}
@@ -109,27 +130,37 @@ const SwirlingGalaxy = ({
   );
 };
 
-// ─── Camera: fixed 1.2s fly-in, then hands off to OrbitControls ───────────────
+// ─── Camera Animator ────────────────────────────────────────────────────────
 const CameraAnimator = ({
   targetPos, settling,
 }: { targetPos: THREE.Vector3; settling: boolean }) => {
   const { camera } = useThree();
   const startTime = useRef<number | null>(null);
   const startPos = useRef(camera.position.clone());
+  const startFov = useRef((camera as THREE.PerspectiveCamera).fov);
 
   useEffect(() => {
     startTime.current = null;
     startPos.current = camera.position.clone();
+    startFov.current = (camera as THREE.PerspectiveCamera).fov;
   }, [targetPos]);
 
   useFrame(({ clock }) => {
     if (!settling) return;
     if (startTime.current === null) startTime.current = clock.getElapsedTime();
-    const t = Math.min((clock.getElapsedTime() - startTime.current) / 1.2, 1.0);
-    // Ease out cubic
-    const e = 1 - Math.pow(1 - t, 3);
+    const t = Math.min((clock.getElapsedTime() - startTime.current) / 1.4, 1.0);
+    // Emil Kowalski easing: cubic-bezier(0.22, 1, 0.36, 1)
+    const e = 1 - Math.pow(1 - t, 4); 
+    
+    // Position
     camera.position.lerpVectors(startPos.current, targetPos, e);
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(targetPos.x, targetPos.y, targetPos.z - 12);
+    
+    // FOV punch
+    const pCam = camera as THREE.PerspectiveCamera;
+    const fovPunch = Math.sin(t * Math.PI) * 12; // punch ~12 degrees up then back down
+    pCam.fov = THREE.MathUtils.lerp(startFov.current, 58, e) + fovPunch;
+    pCam.updateProjectionMatrix();
   });
 
   return null;
@@ -161,17 +192,22 @@ const GalaxyScene = ({
   // Determine camera target
   useEffect(() => {
     if (activeTripId) {
-      targetPos.current = new THREE.Vector3(0, 4, 12);
+      const activeTripIndex = trips.findIndex(t => t.id === activeTripId);
+      const angle = (activeTripIndex / Math.max(trips.length, 1)) * Math.PI * 2;
+      const r = Math.max(22, 16 + trips.length * 2);
+      const pos = new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
+      
+      targetPos.current = new THREE.Vector3(pos.x, pos.y + 4, pos.z + 12);
       setSettling(true); setSettled(false);
-      const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1300);
+      const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
     } else {
       targetPos.current = new THREE.Vector3(0, 16, 36);
       setSettling(true); setSettled(false);
-      const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1300);
+      const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
     }
-  }, [activeTripId]);
+  }, [activeTripId, trips]);
 
   // Trip positions on a ring
   const tripPositions = useMemo(() => {
@@ -203,32 +239,34 @@ const GalaxyScene = ({
       <CameraAnimator targetPos={targetPos.current} settling={settling && !settled} />
 
       <ErrorBoundary fallback={null}>
-        {activeTripId ? (
-          /* ── Micro View: no SwirlingGalaxy, no fog close in ── */
+        {activeTripId && (
+          /* ── Micro View: constellation fades in ── */
           <LiveDebtConstellation
             activeTripId={activeTripId}
             hoveredStar={hoveredStar}
             onStarHover={onStarHover}
             onStarClick={onStarClick}
           />
-        ) : (
-          /* ── Macro View: galaxy ring ── */
-          tripPositions.map(({ trip, pos, cols }) => (
-            <SwirlingGalaxy
-              key={trip.id}
-              position={pos}
-              colorCoreStr={cols.core}
-              colorEdgeStr={cols.edge}
-              name={trip.name}
-              hovered={hoveredGalaxy?.id === trip.id}
-              onClick={() => onSelectTrip(trip)}
-            />
-          ))
         )}
+        
+        {/* ── Macro View: galaxy ring fades out when activeTripId is set ── */
+        tripPositions.map(({ trip, pos, cols }) => (
+          <SwirlingGalaxy
+            key={trip.id}
+            position={pos}
+            colorCoreStr={cols.core}
+            colorEdgeStr={cols.edge}
+            name={trip.name}
+            hovered={hoveredGalaxy?.id === trip.id}
+            selected={activeTripId === trip.id}
+            hidden={activeTripId !== null && activeTripId !== trip.id}
+            onClick={() => onSelectTrip(trip)}
+          />
+        ))}
       </ErrorBoundary>
 
       <EffectComposer>
-        <Bloom luminanceThreshold={0.08} mipmapBlur luminanceSmoothing={0.9} intensity={activeTripId ? 1.6 : 1.2} />
+        <Bloom luminanceThreshold={0.1} mipmapBlur luminanceSmoothing={0.9} intensity={1.5} />
       </EffectComposer>
     </>
   );

@@ -66,17 +66,19 @@ export const KarmaBar = ({ tripId }: Props) => {
 
   return (
     <div style={{ width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-        <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#444' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '12px' }}>
+        <span style={{ fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: '4px' }}>
           Karma Balance
         </span>
         <motion.span
           key={label}
           initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          className="money"
           style={{
-            fontSize: '0.78rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-            color: isPos ? '#6fba8a' : isNeg ? '#d98a6c' : 'rgba(255,255,255,0.25)',
+            fontSize: '1.75rem', fontWeight: 700,
+            color: isPos ? 'var(--owed)' : isNeg ? 'var(--owe)' : 'var(--text-dim)',
+            lineHeight: 1, letterSpacing: '-0.02em'
           }}
         >{label}</motion.span>
       </div>

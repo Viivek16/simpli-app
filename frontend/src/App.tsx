@@ -48,9 +48,17 @@ const BTN_GHOST: React.CSSProperties = {
 // ─── Relative time ────────────────────────────────────────────────────────────
 const relTime = (ts: any): string => {
   try {
-    const ms = typeof ts === 'object' && ts && 'microsSinceEpoch' in ts
-      ? Number(ts.microsSinceEpoch) / 1000
-      : typeof ts === 'number' ? ts : Date.parse(ts);
+    let ms = 0;
+    if (typeof ts === 'object' && ts && 'microsSinceEpoch' in ts) {
+      ms = Number(ts.microsSinceEpoch) / 1000;
+    } else if (typeof ts === 'bigint') {
+      ms = Number(ts) / 1000;
+    } else if (typeof ts === 'number') {
+      ms = ts > 2000000000000 ? ts / 1000 : ts;
+    } else {
+      ms = Date.parse(ts);
+    }
+    if (isNaN(ms) || ms === 0) return '';
     const diffMs = Date.now() - ms;
     if (diffMs < 60_000) return 'just now';
     if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
@@ -300,17 +308,14 @@ const TripRoom = ({
       </div>
 
       {/* Right panel — Ledger */}
-      <div style={{
+      <div className="glass-panel" style={{
         pointerEvents: 'all', position: 'absolute', top: 72, right: 20, bottom: 24,
-        width: '340px',
-        background: 'rgba(8,12,10,0.65)', backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)',
-        borderRadius: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+        width: '340px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        background: 'rgba(5, 6, 10, 0.65)'
       }}>
-        <div style={{ padding: '16px 18px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--glass-brd)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-            <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#555' }}>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
               Trip Ledger {tripExpenses.length > 0 && `· ${tripExpenses.length}`}
             </span>
           </div>
@@ -345,26 +350,24 @@ const TripRoom = ({
                       exit={{ opacity: 0, x: -20 }}
                       transition={{ delay: i * 0.03, duration: 0.25, ease: EO }}
                       style={{
-                        background: isSettlement ? 'rgba(111,186,138,0.05)' : 'rgba(255,255,255,0.02)',
-                        border: `1px solid ${isSettlement ? 'rgba(111,186,138,0.12)' : 'rgba(255,255,255,0.05)'}`,
-                        borderRadius: '12px', padding: '11px 13px', marginBottom: '6px',
-                        position: 'relative',
+                        padding: '11px 13px', marginBottom: '6px', position: 'relative',
+                        borderBottom: '1px solid var(--glass-brd)'
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{
-                            fontWeight: 600, fontSize: '0.9rem', color: isSettlement ? '#6fba8a' : '#e8e8e8',
+                            fontWeight: 600, fontSize: '0.95rem', color: isSettlement ? 'var(--owed)' : 'var(--text)',
                             display: 'flex', alignItems: 'center', gap: '6px',
                           }}>
                             {isSettlement && <span style={{ fontSize: '0.75rem' }}>✓</span>}
                             {exp.description}
                           </div>
-                          <div style={{ color: '#555', fontSize: '0.72rem', marginTop: '3px' }}>{splitSummary}</div>
-                          <div style={{ color: '#444', fontSize: '0.68rem', marginTop: '1px' }}>{relTime(exp.timestamp)}</div>
+                          <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem', marginTop: '3px' }}>{splitSummary}</div>
+                          <div style={{ color: 'var(--text-dim)', opacity: 0.6, fontSize: '0.7rem', marginTop: '1px' }}>{relTime(exp.timestamp)}</div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0, marginLeft: '10px' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#9bafa4', fontVariantNumeric: 'tabular-nums' }}>
+                          <span className="money" style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text)' }}>
                             {INR(exp.amount)}
                           </span>
                           {/* Action buttons */}
@@ -409,56 +412,56 @@ const TripRoom = ({
           <motion.div
             initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
             transition={{ duration: 0.35, ease: EO }}
+            className="glass-panel"
             style={{
               pointerEvents: 'all', position: 'absolute', top: 72, right: 20, bottom: 24,
-              width: '340px', zIndex: 15,
-              background: 'rgba(8,12,10,0.85)', backdropFilter: 'blur(24px)',
-              WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)',
-              borderRadius: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+              width: '340px', zIndex: 15, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              background: 'rgba(5, 6, 10, 0.65)'
             }}
           >
-            <div style={{ padding: '16px 18px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e0e8e5' }}>
-                {userMap.get(selectedMemberId) || 'Member'}
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text)' }}>
+                {selectedMemberId === localId ? 'You' : (userMap.get(selectedMemberId) || 'Member')}
               </span>
-              <button onClick={() => onSelectMember(null)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px' }}>×</button>
+              <button onClick={() => onSelectMember(null)} className="btn-ghost" style={{ fontSize: '1.2rem', padding: '0 4px', width: 32, height: 32 }}>×</button>
             </div>
             
-            <div style={{ padding: '24px 18px', borderBottom: '1px solid rgba(255,255,255,0.05)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.7rem', color: '#6a7a76', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Net Balance</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: memberBalances.net === 0 ? '#9bafa4' : memberBalances.net > 0 ? '#6fba8a' : '#d98a6c', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>
+            <div style={{ padding: '24px 18px', borderBottom: '1px solid var(--glass-brd)', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', fontWeight: 600 }}>Net Balance</div>
+              <div className="money" style={{ fontSize: '2rem', fontWeight: 700, color: memberBalances.net === 0 ? 'var(--text-dim)' : memberBalances.net > 0 ? 'var(--owed)' : 'var(--owe)', letterSpacing: '-0.02em' }}>
                 {INR(Math.abs(memberBalances.net))}
               </div>
-              <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '4px' }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginTop: '4px' }}>
                 {memberBalances.net === 0 ? 'Settled up' : memberBalances.net > 0 ? 'gets back in total' : 'owes in total'}
               </div>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
               {memberBalances.details.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '20px', color: '#555', fontSize: '0.85rem' }}>No outstanding balances.</div>
+                <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-dim)', fontSize: '0.85rem' }}>No outstanding balances.</div>
               ) : (
                 memberBalances.details.map(({ otherId, amount }) => {
-                  const otherName = userMap.get(otherId) || 'Member';
+                  const otherName = otherId === localId ? 'You' : (userMap.get(otherId) || 'Member');
                   const isOwedToSelected = amount > 0;
+                  const owesText = isOwedToSelected ? `${otherName} owe${otherId === localId ? '' : 's'}` : `Owe${selectedMemberId === localId ? '' : 's'} ${otherName}`;
                   return (
                     <div key={otherId} style={{
-                      background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)',
-                      borderRadius: '12px', padding: '12px 14px', marginBottom: '8px',
+                      borderBottom: '1px solid var(--glass-brd)',
+                      padding: '12px 14px', marginBottom: '4px',
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between'
                     }}>
                       <div>
-                        <div style={{ fontSize: '0.85rem', color: '#e0e8e5', fontWeight: 500, marginBottom: '2px' }}>
-                          {isOwedToSelected ? `${otherName} owes` : `Owes ${otherName}`}
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', fontWeight: 500, marginBottom: '2px' }}>
+                          {owesText}
                         </div>
-                        <div style={{ fontSize: '1rem', fontWeight: 700, color: isOwedToSelected ? '#6fba8a' : '#d98a6c', fontVariantNumeric: 'tabular-nums' }}>
+                        <div className="money" style={{ fontSize: '1rem', fontWeight: 700, color: isOwedToSelected ? 'var(--owed)' : 'var(--owe)' }}>
                           {INR(Math.abs(amount))}
                         </div>
                       </div>
                       <button
                         onClick={() => handleSettle(otherId, amount)}
-                        style={{ ...BTN_GHOST, padding: '6px 12px', color: '#050a08', background: isOwedToSelected ? '#6fba8a' : '#d98a6c', border: 'none', borderRadius: '8px' }}
+                        className="btn-secondary"
+                        style={{ padding: '6px 12px', height: 'auto', borderRadius: '8px', fontSize: '0.8rem', color: isOwedToSelected ? 'var(--owed)' : 'var(--owe)' }}
                       >
                         Settle
                       </button>
@@ -490,27 +493,28 @@ const TripRoom = ({
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setShowDeleteTrip(false)}
-              style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)' }}
+              style={{ position: 'absolute', inset: 0, background: 'rgba(255,100,100,0.1)', backdropFilter: 'blur(12px)' }}
             />
             <motion.div
               initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }}
               transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+              className="glass-panel"
               style={{
                 position: 'relative', zIndex: 1, width: '100%', maxWidth: '440px',
-                background: 'rgba(12,10,10,0.98)', border: '1px solid rgba(217,138,108,0.2)',
-                borderRadius: '20px', padding: '28px',
+                background: 'rgba(12,10,10,0.98)', border: '1px solid rgba(255,138,107,0.3)',
+                borderRadius: '26px', padding: '28px',
                 display: 'flex', flexDirection: 'column', gap: '20px',
               }}
               onClick={e => e.stopPropagation()}
             >
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#d98a6c' }}>Delete galaxy</h2>
-                <p style={{ margin: '8px 0 0', fontSize: '0.82rem', color: '#8e8e93', lineHeight: 1.5 }}>
-                  This deletes <strong style={{ color: '#e0e8e5' }}>{trip.name}</strong>, its members, and every expense for everyone in it. This cannot be undone.
+                <h2 className="font-clash" style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--owe)' }}>Delete galaxy</h2>
+                <p style={{ margin: '8px 0 0', fontSize: '0.85rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                  This deletes <strong style={{ color: 'var(--text)' }}>{trip.name}</strong>, its members, and every expense for everyone in it. This cannot be undone.
                 </p>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '0.75rem', color: '#8e8e93', marginBottom: '8px', fontWeight: 600 }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 600 }}>
                   Type <strong>{trip.name}</strong> to confirm
                 </label>
                 <input
@@ -518,25 +522,20 @@ const TripRoom = ({
                   onChange={e => setDeleteTripName(e.target.value)}
                   placeholder={trip.name}
                   style={{
-                    width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '10px 14px',
-                    color: 'white', fontSize: '0.9rem', outline: 'none', fontFamily: 'inherit',
+                    width: '100%', boxSizing: 'border-box', background: 'var(--glass)',
+                    border: '1px solid var(--glass-brd)', borderRadius: '14px', padding: '12px 16px',
+                    color: 'white', fontSize: '1rem', outline: 'none', fontFamily: 'inherit',
+                    transition: 'border-color var(--dur-micro) ease',
                   }}
                 />
               </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={() => setShowDeleteTrip(false)} style={{ ...BTN_GHOST, flex: 1 }}>Cancel</button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => setShowDeleteTrip(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
                 <button
                   onClick={handleDeleteTrip}
                   disabled={deleteTripName !== trip.name}
-                  style={{
-                    flex: 1, background: deleteTripName === trip.name ? 'rgba(217,138,108,0.2)' : 'rgba(255,255,255,0.03)',
-                    border: `1px solid ${deleteTripName === trip.name ? '#d98a6c' : 'rgba(255,255,255,0.1)'}`,
-                    color: deleteTripName === trip.name ? '#d98a6c' : '#555',
-                    borderRadius: '10px', padding: '11px', fontWeight: 700, fontSize: '0.9rem',
-                    cursor: deleteTripName === trip.name ? 'pointer' : 'default',
-                    transition: 'all 200ms ease', fontFamily: 'inherit',
-                  }}
+                  className="btn-destructive"
+                  style={{ flex: 1, opacity: deleteTripName === trip.name ? 1 : 0.4 }}
                 >
                   Delete galaxy
                 </button>
@@ -597,18 +596,18 @@ const Dashboard = ({
         display: 'flex', alignItems: 'center', gap: '12px', padding: '20px 28px',
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-          <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.04em', color: '#f8f9fa' }}>SIMPLI</span>
-          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a7a76', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)' }}>SIMPLI</span>
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             {profile.name.split(' ')[0]}'s cosmos
           </span>
         </div>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 11px', borderRadius: '20px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: isConnected ? '#6fba8a' : '#555', boxShadow: isConnected ? '0 0 8px #6fba8a' : 'none' }} />
-          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: isConnected ? '#6fba8a' : '#8e8e93' }}>{isConnected ? 'Live' : 'Offline'}</span>
+        <div className="glass-pill" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 11px' }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: isConnected ? 'var(--owed)' : '#555', boxShadow: isConnected ? '0 0 8px var(--owed)' : 'none' }} />
+          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: isConnected ? 'var(--owed)' : 'var(--text-dim)' }}>{isConnected ? 'Live' : 'Offline'}</span>
         </div>
-        <img src={profile.picture} alt="" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.25)' }} />
-        <button onClick={onLogout} style={{ ...BTN_GHOST, padding: '7px 14px', fontSize: '0.82rem' }}>Logout</button>
+        <img src={profile.picture} alt="" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)' }} />
+        <button onClick={onLogout} className="btn-secondary" style={{ height: '34px', borderRadius: '999px', fontSize: '0.82rem' }}>Logout</button>
       </div>
 
       {/* Empty State */}
@@ -617,7 +616,7 @@ const Dashboard = ({
           position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', opacity: 0.6
         }}>
-          <div style={{ fontSize: '1.1rem', color: '#8e8e93', fontWeight: 500 }}>Forge your first galaxy</div>
+          <div className="font-clash" style={{ fontSize: '1.25rem', color: 'var(--text-dim)', fontWeight: 500 }}>Forge your first galaxy</div>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#6a7a76' }}>
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <polyline points="19 12 12 19 5 12"></polyline>
@@ -627,27 +626,24 @@ const Dashboard = ({
 
       {/* Bottom Create Bar */}
       <div style={{
-        position: 'absolute', bottom: '28px', left: '50%', transform: 'translateX(-50%)',
+        position: 'absolute', bottom: '32px', left: '50%', transform: 'translateX(-50%)',
         pointerEvents: 'all', width: '100%', maxWidth: '520px', padding: '0 16px', boxSizing: 'border-box'
       }}>
-        <form onSubmit={handleCreate} style={{ 
-          display: 'flex', gap: '8px', background: 'rgba(16,20,18,0.75)', backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: '32px', padding: '6px'
+        <form onSubmit={handleCreate} className="glass-pill" style={{ 
+          display: 'flex', gap: '8px', padding: '8px'
         }}>
           <input
             value={newTripName} onChange={e => setNewTripName(e.target.value)}
             placeholder="Name a new galaxy…"
             style={{
-              flex: 1, background: 'transparent', border: 'none', padding: '12px 18px', color: 'white',
+              flex: 1, background: 'transparent', border: 'none', padding: '12px 18px', color: 'var(--text)',
               fontSize: '1rem', outline: 'none', fontFamily: 'inherit'
             }}
           />
-          <button type="submit" disabled={!newTripName.trim() || creating || !isConnected} style={{
-            background: '#9bafa4', color: '#050a08', border: 'none', borderRadius: '24px',
-            padding: '0 24px', fontWeight: 700, cursor: 'pointer',
+          <button type="submit" disabled={!newTripName.trim() || creating || !isConnected} className="btn-primary" style={{
+            borderRadius: '999px',
+            padding: '0 24px', fontWeight: 700,
             opacity: newTripName.trim() && !creating && isConnected ? 1 : 0.4,
-            transition: 'opacity 180ms ease', fontFamily: 'inherit', fontSize: '0.95rem'
           }}>
             {creating ? '…' : 'Forge'}
           </button>
@@ -682,36 +678,34 @@ const LoginView = ({ onLogin }: { onLogin: (p: GoogleProfile) => void }) => {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'var(--bg-grad)', zIndex: -2 }}></div>
+      <div style={{
+        position: 'absolute', top: '50%', left: '50%', width: 300, height: 300,
+        transform: 'translate(-50%, -50%)',
+        background: 'radial-gradient(circle, rgba(167, 139, 250, 0.15) 0%, rgba(94, 230, 255, 0.15) 40%, transparent 70%)',
+        zIndex: -1, animation: 'bloomFadeIn 2s ease-out forwards', filter: 'blur(40px)'
+      }}></div>
       <motion.div
-        initial={{ opacity: 0, y: 24, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: EO }}
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        className="glass-panel"
         style={{
-          width: '100%', maxWidth: '360px',
-          background: 'rgba(255,255,255,0.025)', backdropFilter: 'blur(36px)',
-          WebkitBackdropFilter: 'blur(36px)', border: '1px solid rgba(255,255,255,0.07)',
-          borderRadius: '24px', padding: '44px 32px',
+          width: '100%', maxWidth: '380px',
+          padding: '48px 32px',
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '28px',
-          boxShadow: '0 32px 80px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.05)',
         }}
       >
         <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: 60, height: 60, borderRadius: '18px', margin: '0 auto 14px',
-            background: 'linear-gradient(135deg, rgba(156,174,169,0.18), rgba(156,174,169,0.04))',
-            border: '1px solid rgba(156,174,169,0.25)', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', fontSize: '1.5rem', fontWeight: 900, color: '#9bafa4',
-            boxShadow: '0 0 28px rgba(156,174,169,0.12)',
-          }}>S</div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.04em', color: '#f8f9fa' }}>SIMPLI</h1>
-          <p style={{ margin: '6px 0 0', color: '#5a6a66', fontSize: '0.88rem', lineHeight: 1.4 }}>
-            Every group is a galaxy.<br/>Every friend is a star.
+          <h1 className="font-clash" style={{ margin: 0, fontSize: '1.75rem', fontWeight: 700, color: 'var(--text)' }}>SIMPLI</h1>
+          <p style={{ margin: '8px 0 0', color: 'var(--text-dim)', fontSize: '0.95rem', fontWeight: 500 }}>
+            Split expenses in a living cosmos.
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 14px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', width: '100%', justifyContent: 'center' }}>
-          <div style={{ width: 7, height: 7, borderRadius: '50%', background: dbError ? '#d98a6c' : dbReady ? '#6fba8a' : '#444', boxShadow: dbReady ? '0 0 8px #6fba8a' : 'none' }} />
-          <span style={{ fontSize: '0.78rem', color: dbError ? '#d98a6c' : dbReady ? '#6fba8a' : '#555', fontWeight: 500 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', background: 'var(--glass)', borderRadius: '999px', width: '100%', justifyContent: 'center' }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: dbError ? 'var(--owe)' : dbReady ? 'var(--owed)' : '#444', boxShadow: dbReady ? '0 0 8px var(--owed)' : 'none' }} />
+          <span style={{ fontSize: '0.75rem', color: dbError ? 'var(--owe)' : dbReady ? 'var(--owed)' : 'var(--text-dim)', fontWeight: 500 }}>
             {dbError ? `Error: ${dbError}` : dbReady ? 'Database connected' : 'Connecting…'}
           </span>
         </div>

@@ -10,26 +10,12 @@ const INR = (v: number) =>
 const S: Record<string, React.CSSProperties> = {
   input: {
     width: '100%', boxSizing: 'border-box',
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: '10px', padding: '10px 14px',
-    color: 'white', fontSize: '0.9rem', outline: 'none',
+    background: 'var(--glass)',
+    border: '1px solid var(--glass-brd)',
+    borderRadius: '14px', padding: '12px 16px',
+    color: 'var(--text)', fontSize: '1rem', outline: 'none',
     fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums',
-    transition: 'border-color 180ms ease',
-  },
-  btnPrimary: {
-    background: 'linear-gradient(135deg, #9bafa4 0%, #6d8f84 100%)',
-    color: '#050a08', border: 'none', borderRadius: '10px',
-    padding: '11px 22px', fontWeight: 700, fontSize: '0.9rem',
-    cursor: 'pointer', flexShrink: 0, display: 'flex',
-    alignItems: 'center', justifyContent: 'center', gap: '8px',
-    fontFamily: 'inherit', transition: 'opacity 160ms ease',
-  },
-  btnGhost: {
-    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-    color: '#999', borderRadius: '10px', padding: '11px 18px', fontWeight: 600,
-    fontSize: '0.9rem', cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit',
-    transition: 'background 160ms ease',
+    transition: 'border-color var(--dur-micro) ease',
   },
 };
 
@@ -226,34 +212,33 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
       <motion.form
         onSubmit={submit}
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        className="glass-panel"
         style={{
           position: 'relative', width: '100%', maxWidth: '560px',
-          maxHeight: '56vh', overflowY: 'auto',
-          background: 'rgba(12,14,13,0.92)', borderTop: '1px solid rgba(255,255,255,0.08)',
-          borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '22px 22px 0 0', padding: '24px 28px',
+          maxHeight: '70vh', overflowY: 'auto',
+          borderRadius: '26px 26px 0 0', padding: '24px',
           display: 'flex', flexDirection: 'column', gap: '20px',
-          boxShadow: '0 -20px 80px rgba(0,0,0,0.8)', backdropFilter: 'blur(32px)', WebkitBackdropFilter: 'blur(32px)'
         }}
       >
-        <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.15)', borderRadius: '2px', margin: '-10px auto 10px' }} />
+        <div style={{ width: '40px', height: '4px', background: 'var(--glass-hi)', borderRadius: '2px', margin: '-8px auto 12px' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#e0e8e5' }}>
+          <h2 className="font-clash" style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: 'var(--text)' }}>
             {isEdit ? 'Edit expense' : 'Add expense'}
           </h2>
-          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: '1.5rem', cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>×</button>
+          <button type="button" onClick={onClose} className="btn-ghost" style={{ fontSize: '1.5rem', width: 32, height: 32, padding: 0 }}>×</button>
         </div>
 
         {/* Split mode tabs */}
-        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '3px', gap: '2px' }}>
+        <div className="glass-pill" style={{ display: 'flex', padding: '4px', gap: '4px' }}>
           {modes.map(({ key, label }) => (
             <button key={key} type="button" onClick={() => setMode(key)} style={{
-              flex: 1, padding: '7px 8px', borderRadius: '7px', border: 'none',
-              cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', fontFamily: 'inherit',
-              transition: 'background 180ms ease, color 180ms ease',
-              background: mode === key ? 'rgba(156,174,169,0.18)' : 'transparent',
-              color: mode === key ? '#9bafa4' : '#666',
+              flex: 1, padding: '8px 12px', borderRadius: '999px', border: 'none',
+              cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', fontFamily: 'inherit',
+              transition: 'all var(--dur-micro) ease',
+              background: mode === key ? 'var(--glass)' : 'transparent',
+              color: mode === key ? 'var(--text)' : 'var(--text-dim)',
+              boxShadow: mode === key ? 'inset 0 1px 0 var(--glass-hi)' : 'none',
             }}>
               {label}
             </button>
@@ -262,31 +247,32 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
 
         {/* Description */}
         <div>
-          <label htmlFor={`${uid}-d`} style={{ display: 'block', fontSize: '0.75rem', color: '#8e8e93', marginBottom: '6px', fontWeight: 600 }}>Description</label>
+          <label htmlFor={`${uid}-d`} style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 600 }}>Description</label>
           <input id={`${uid}-d`} value={desc} onChange={e => setDesc(e.target.value)}
             placeholder="Airbnb, dinner, taxi…" style={S.input} autoFocus />
         </div>
 
         {/* Amount */}
         <div>
-          <label htmlFor={`${uid}-a`} style={{ display: 'block', fontSize: '0.75rem', color: '#8e8e93', marginBottom: '6px', fontWeight: 600 }}>Amount (₹)</label>
+          <label htmlFor={`${uid}-a`} style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 600 }}>Amount (₹)</label>
           <input id={`${uid}-a`} type="number" min="0.01" step="0.01" value={amt}
-            onChange={e => setAmt(e.target.value)} placeholder="0.00" style={S.input} />
+            onChange={e => setAmt(e.target.value)} placeholder="0.00" style={S.input} className="money" />
         </div>
 
         {/* Participants (show unless personal) */}
         {mode !== 'personal' && tripMembers.length > 0 && (
           <div>
-            <div style={{ fontSize: '0.75rem', color: '#8e8e93', marginBottom: '8px', fontWeight: 600 }}>Participants</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 600 }}>Participants</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {tripMembers.map(m => (
                 <button key={m.id} type="button" onClick={() => toggleMember(m.id)} style={{
-                  padding: '5px 12px', borderRadius: '20px', border: '1px solid',
-                  borderColor: selected.has(m.id) ? '#9bafa4' : 'rgba(255,255,255,0.1)',
-                  background: selected.has(m.id) ? 'rgba(156,174,169,0.15)' : 'transparent',
-                  color: selected.has(m.id) ? '#9bafa4' : '#666',
-                  fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                  transition: 'all 150ms ease',
+                  padding: '6px 14px', borderRadius: '999px', border: '1px solid',
+                  borderColor: selected.has(m.id) ? 'var(--glass-hi)' : 'transparent',
+                  background: selected.has(m.id) ? 'var(--glass)' : 'transparent',
+                  color: selected.has(m.id) ? 'var(--text)' : 'var(--text-dim)',
+                  fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'all var(--dur-micro) ease',
+                  boxShadow: selected.has(m.id) ? 'inset 0 1px 0 var(--glass-hi)' : 'none',
                 }}>
                   {m.name}
                 </button>
@@ -297,20 +283,20 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
 
         {/* Unequal inputs */}
         {mode === 'unequal' && selectedArr.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {selectedArr.map(m => (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ flex: 1, fontSize: '0.88rem', color: '#c8d8d4', fontWeight: 500 }}>{m.name}</span>
+              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ flex: 1, fontSize: '0.9rem', color: 'var(--text)', fontWeight: 500 }}>{m.name}</span>
                 <input type="number" min="0" step="0.01"
                   value={unequalAmts[m.id] ?? ''}
                   onChange={e => setUnequalAmts(prev => ({ ...prev, [m.id]: e.target.value }))}
                   placeholder="0.00"
-                  style={{ ...S.input, width: '110px', textAlign: 'right' }} />
+                  style={{ ...S.input, width: '120px', textAlign: 'right' }} className="money" />
               </div>
             ))}
-            <div style={{
-              textAlign: 'right', fontSize: '0.8rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-              color: Math.abs(remaining) < 0.005 ? '#6fba8a' : '#d98a6c',
+            <div className="money" style={{
+              textAlign: 'right', fontSize: '0.85rem', fontWeight: 700,
+              color: Math.abs(remaining) < 0.005 ? 'var(--owed)' : 'var(--owe)',
             }}>
               {Math.abs(remaining) < 0.005 ? '✓ Balanced' : `${remaining > 0 ? '+' : ''}${INR(remaining)} remaining`}
             </div>
@@ -319,18 +305,18 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
 
         {/* Shares inputs */}
         {mode === 'shares' && selectedArr.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {selectedArr.map(m => (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ flex: 1, fontSize: '0.88rem', color: '#c8d8d4', fontWeight: 500 }}>{m.name}</span>
-                <div style={{ fontSize: '0.8rem', color: '#8e8e93', width: '70px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ flex: 1, fontSize: '0.9rem', color: 'var(--text)', fontWeight: 500 }}>{m.name}</span>
+                <div className="money" style={{ fontSize: '0.85rem', color: 'var(--text-dim)', width: '80px', textAlign: 'right' }}>
                   {totalAmt > 0 ? INR(shareAmounts[m.id] ?? 0) : ''}
                 </div>
                 <input type="number" min="1" step="1"
                   value={shares[m.id] ?? '1'}
                   onChange={e => setShares(prev => ({ ...prev, [m.id]: e.target.value }))}
-                  style={{ ...S.input, width: '64px', textAlign: 'center' }} />
-                <span style={{ color: '#555', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>share{parseInt(shares[m.id] || '1') !== 1 ? 's' : ''}</span>
+                  style={{ ...S.input, width: '70px', textAlign: 'center' }} />
+                <span style={{ color: 'var(--text-dim)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>share{parseInt(shares[m.id] || '1') !== 1 ? 's' : ''}</span>
               </div>
             ))}
           </div>
@@ -338,24 +324,24 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
 
         {/* Equally info */}
         {mode === 'equally' && selectedArr.length > 0 && totalAmt > 0 && (
-          <p style={{ margin: 0, fontSize: '0.8rem', color: '#9bafa4', background: 'rgba(156,174,169,0.07)', padding: '10px 12px', borderRadius: '8px' }}>
-            {INR(totalAmt / selectedArr.length)} each across {selectedArr.length} participant{selectedArr.length !== 1 ? 's' : ''}
+          <p className="glass-panel" style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--glass-brd)' }}>
+            <span className="money">{INR(totalAmt / selectedArr.length)}</span> each across {selectedArr.length} participant{selectedArr.length !== 1 ? 's' : ''}
           </p>
         )}
 
         {/* Personal info */}
         {mode === 'personal' && (
-          <p style={{ margin: 0, fontSize: '0.8rem', color: '#8e8e93', background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '8px' }}>
+          <p className="glass-panel" style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-dim)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--glass-brd)' }}>
             Tracked for you only — not split with anyone.
           </p>
         )}
 
-        {err && <p style={{ margin: 0, color: '#d98a6c', fontSize: '0.85rem', fontWeight: 600 }}>⚠ {err}</p>}
+        {err && <p style={{ margin: 0, color: 'var(--owe)', fontSize: '0.85rem', fontWeight: 600 }}>⚠ {err}</p>}
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-          <button type="button" onClick={onClose} style={S.btnGhost}>Cancel</button>
-          <button type="submit" disabled={loading || !canSubmit} style={{ ...S.btnPrimary, flex: 1, opacity: (loading || !canSubmit) ? 0.5 : 1 }}>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+          <button type="button" onClick={onClose} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+          <button type="submit" disabled={loading || !canSubmit} className="btn-primary" style={{ flex: 2, opacity: (loading || !canSubmit) ? 0.5 : 1 }}>
             {loading ? <Spinner /> : isEdit ? 'Save Changes' : 'Add Expense'}
           </button>
         </div>
