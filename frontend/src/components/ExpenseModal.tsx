@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import * as StDB from '../spacetimedb';
 import { toast } from './Toast';
 import type { Expense, ExpenseSplit } from '../module_bindings/types';
+import { AudioService } from '../audio';
 
 const INR = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(v);
@@ -12,7 +13,7 @@ const S: Record<string, React.CSSProperties> = {
     width: '100%', boxSizing: 'border-box',
     background: 'var(--glass)',
     border: '1px solid var(--glass-brd)',
-    borderRadius: '14px', padding: '12px 16px',
+    borderRadius: '12px', padding: '12px 16px',
     color: 'var(--text)', fontSize: '1rem', outline: 'none',
     fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums',
     transition: 'border-color var(--dur-micro) ease',
@@ -137,6 +138,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
           description: desc.trim(),
           splits: splitsJson,
         });
+        AudioService.playBlip();
         toast.success('Expense updated');
       } else {
         const expenseId = `exp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -147,6 +149,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
           description: desc.trim(),
           splits: splitsJson,
         });
+        AudioService.playBlip();
         toast.success(`Added ${INR(totalAmt)}`);
       }
       onClose();
@@ -251,7 +254,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {tripMembers.map(m => (
                 <button key={m.id} type="button" onClick={() => toggleMember(m.id)} style={{
-                  padding: '6px 14px', borderRadius: '999px',
+                  padding: '6px 14px', borderRadius: '12px',
                   border: '1px solid',
                   borderColor: selected.has(m.id) ? 'var(--owed)' : 'var(--glass-brd)',
                   background: selected.has(m.id) ? 'rgba(111,186,138,0.1)' : 'transparent',

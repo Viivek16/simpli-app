@@ -22,6 +22,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import type { Trip } from '../hooks/useTrips';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import * as StDB from '../spacetimedb';
+import { AudioService } from '../audio';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 
@@ -93,7 +94,7 @@ const SwirlingGalaxy = ({
       const arm = i % 3;
       const branchAngle = (arm * Math.PI * 2) / 3;
       const t = Math.pow(Math.random(), 1.4) * Math.PI * 3.5; 
-      const radius = 0.6 * Math.exp(0.18 * t);
+      const radius = 0.45 * Math.exp(0.15 * t);
       const angle = branchAngle + t;
 
       const scatter = Math.random() * (radius * 0.35) + 0.1;
@@ -105,7 +106,7 @@ const SwirlingGalaxy = ({
       p[i * 3 + 1] = sy;
       p[i * 3 + 2] = Math.sin(angle) * radius + sz;
       
-      const intensity = Math.max(0, 1 - Math.pow(radius / 16, 1.2));
+      const intensity = Math.max(0, 1 - Math.pow(radius / 9, 1.2));
       temp.lerpColors(cEdge, cCore, intensity);
       if (radius < 2.5) temp.lerp(white, 1 - radius / 2.5);
       
@@ -148,12 +149,12 @@ const SwirlingGalaxy = ({
       ref.current.scale.set(s, s, s);
       mat.opacity = e * targetOpacity;
       if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * 0.35;
-      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.15;
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.12;
     } else {
       ref.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.04);
       mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
       if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * 0.35;
-      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.15;
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.12;
     }
   });
 
@@ -175,11 +176,11 @@ const SwirlingGalaxy = ({
           />
         </Points>
         {/* Core Glow */}
-        <sprite ref={spriteRef1} scale={[11, 11, 1]} position={[0, 0, 0]}>
+        <sprite ref={spriteRef1} scale={[4.5, 4.5, 1]} position={[0, 0, 0]}>
           <spriteMaterial map={sharedGlowTex} color={coreColor} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
         </sprite>
         {/* Nebula Haze */}
-        <sprite ref={spriteRef2} scale={[45, 45, 1]} position={[0, -0.5, 0]}>
+        <sprite ref={spriteRef2} scale={[12, 12, 1]} position={[0, -0.5, 0]}>
           <spriteMaterial map={sharedGlowTex} color={edgeColor} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
         </sprite>
       </group>
@@ -189,7 +190,7 @@ const SwirlingGalaxy = ({
             color: hovered ? '#ffffff' : 'var(--text)',
             background: 'rgba(5,6,10,0.5)',
             padding: '4px 12px',
-            borderRadius: '999px',
+            borderRadius: '12px',
             backdropFilter: 'blur(6px)',
             border: '1px solid var(--glass-brd)',
             fontWeight: 600, fontSize: '1rem',
@@ -237,7 +238,7 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
     const c = new Float32Array(TOTAL * 3);
     for (let i = 0; i < TOTAL; i++) {
       const layer = i % 3;
-      const r = 180 + layer * 80 + Math.random() * 40;
+      const r = 55 + layer * 35 + Math.random() * 25;
       const theta = 2 * Math.PI * Math.random();
       const phi = Math.acos(2 * Math.random() - 1);
       p[i * 3] = r * Math.sin(phi) * Math.cos(theta);
@@ -264,7 +265,7 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
 
   return (
     <Points ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}>
-      <PointMaterial transparent vertexColors size={0.3} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
+      <PointMaterial transparent vertexColors size={0.5} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
     </Points>
   );
 };
@@ -335,7 +336,7 @@ const GalaxyScene = ({
     if (activeTripId) {
       const activeTripIndex = trips.findIndex(t => t.id === activeTripId);
       const angle = (activeTripIndex / Math.max(trips.length, 1)) * Math.PI * 2;
-      const r = Math.max(22, 16 + trips.length * 2);
+      const r = Math.max(11, 8 + trips.length * 1.5);
       const pos = new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
       
       targetPos.current = new THREE.Vector3(pos.x, pos.y + 4, pos.z + 12);
@@ -343,7 +344,7 @@ const GalaxyScene = ({
       const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
     } else {
-      targetPos.current = new THREE.Vector3(0, 16, 36);
+      targetPos.current = new THREE.Vector3(0, 9, 26);
       setSettling(true); setSettled(false);
       const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
@@ -354,7 +355,7 @@ const GalaxyScene = ({
   const tripPositions = useMemo(() => {
     return trips.map((trip, idx) => {
       const angle = (idx / Math.max(trips.length, 1)) * Math.PI * 2;
-      const r = Math.max(22, 16 + trips.length * 2);
+      const r = Math.max(11, 8 + trips.length * 1.5);
       return {
         trip,
         pos: new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r),
@@ -407,7 +408,7 @@ const GalaxyScene = ({
               hovered={hoveredGalaxy?.id === trip.id}
               selected={activeTripId === trip.id}
               hidden={activeTripId !== null}
-              onClick={() => onSelectTrip(trip)}
+              onClick={() => { AudioService.playBlip(); onSelectTrip(trip); }}
               settled={bal.settled}
               netBalances={bal.netBalances}
             />
@@ -512,7 +513,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
     }}>
       <ErrorBoundary fallback={<CosmosFallback trips={trips} onSelectTrip={onSelectTrip} />}>
         <Canvas
-          camera={{ position: [0, 16, 36], fov: 58 }}
+          camera={{ position: [0, 9, 26], fov: 50 }}
           dpr={[1, 1.5]}
           frameloop={uiPaused ? 'never' : 'always'}
           style={{ pointerEvents: uiPaused ? 'none' : 'all' }}

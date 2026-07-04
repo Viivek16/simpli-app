@@ -16,6 +16,7 @@ import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import { useTripMember } from '../hooks/useTrips';
 import { toast } from './Toast';
 import * as StDB from '../spacetimedb';
+import { AudioService } from '../audio';
 
 const INR = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
@@ -180,6 +181,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
     if (!c) return;
     try {
       await c.reducers.settleDebt({ tripId: activeTripId, debtorId: payerId, payeeId, amount: settleAmt });
+      AudioService.playBlip();
       toast.success('Settled up!');
     } catch (e: any) {
       toast.error(e?.message ?? 'Failed to settle debt');
@@ -218,7 +220,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
           <group key={node.id} position={node.position} name="star-group" userData={{ baseY: node.position.y, seed: i * 2.1 }}>
             {/* Invisible hit target for clicks */}
             <mesh
-              onClick={(e) => { e.stopPropagation(); onStarClick(node.id); }}
+              onClick={(e) => { e.stopPropagation(); AudioService.playBlip(); onStarClick(node.id); }}
               onPointerOver={(e) => { e.stopPropagation(); onStarHover(node.id); }}
               onPointerOut={() => onStarHover(null)}
             >
@@ -314,7 +316,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
                     transition={{ type: 'spring', damping: 24, stiffness: 350 }}
                     style={{
                       background: 'rgba(10, 12, 16, 0.85)', backdropFilter: 'blur(20px)',
-                      border: '1px solid rgba(255,255,255,0.15)', borderRadius: '20px',
+                      border: '1px solid rgba(255,255,255,0.15)', borderRadius: '18px',
                       padding: '20px', width: '220px',
                       boxShadow: '0 16px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
                       marginTop: '110px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'

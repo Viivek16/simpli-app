@@ -137,8 +137,8 @@ const TripRoom = ({
 
   // Sync overlay status with App to pause background
   useEffect(() => {
-    onOverlayChange(showModal || showDeleteTrip || selectedMemberId !== null);
-  }, [showModal, showDeleteTrip, selectedMemberId, onOverlayChange]);
+    onOverlayChange(showModal || showDeleteTrip);
+  }, [showModal, showDeleteTrip, onOverlayChange]);
 
   // Handle Escape / Backspace for back navigation
   useEffect(() => {
@@ -284,7 +284,7 @@ const TripRoom = ({
         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
         onMouseLeave={(e) => e.currentTarget.style.background = 'var(--glass)'}
         >
-          <span style={{ color: 'var(--text-dim)' }}>←</span> ◍ {trip.name}
+          <span style={{ color: 'var(--text-dim)' }}>←</span> {trip.name}
         </button>
 
         <div style={{ flex: 1 }} />
@@ -309,23 +309,18 @@ const TripRoom = ({
         display: 'flex', alignItems: 'center', gap: '16px', zIndex: 20
       }}>
         <button onClick={copyInvite} className="btn-secondary" style={{ 
-          color: '#ffffff', padding: '0 20px', background: 'rgba(5, 6, 10, 0.85)',
-          display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', height: '48px',
-          fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
-          border: '1px solid var(--glass-brd)', transition: 'background 0.2s', minWidth: '150px', justifyContent: 'center'
+          padding: '0 20px', height: '48px', borderRadius: '12px', minWidth: '150px',
         }}
         title="Invite">
-           <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="var(--owed)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
+           <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
            {copied ? 'Copied' : 'Invite'}
         </button>
 
-        <button onClick={() => { setEditPayload(null); setShowModal(true); }} className="btn-secondary" style={{ 
-          color: '#ffffff', padding: '0 20px', background: 'rgba(5, 6, 10, 0.85)',
-          display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', height: '48px',
-          fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
-          border: '1px solid var(--glass-brd)', transition: 'background 0.2s', minWidth: '150px', justifyContent: 'center'
+        <button onClick={() => { AudioService.playBlip(); setEditPayload(null); setShowModal(true); }} className="btn-primary" style={{ 
+          padding: '0 20px', height: '48px', borderRadius: '12px', minWidth: '150px', color: '#ffffff',
+          background: 'linear-gradient(180deg, #FFC46B, #E8963A)', boxShadow: '0 6px 18px rgba(232,150,58,0.35)', border: 'none'
         }}>
-          <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="var(--owed)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           <span style={{ fontWeight: 600 }}>Add expense</span>
         </button>
       </div>
@@ -473,7 +468,7 @@ const TripRoom = ({
               style={{
                 position: 'relative', zIndex: 1, width: '100%', maxWidth: '440px',
                 background: 'rgba(12,10,10,0.98)', border: '1px solid rgba(255,138,107,0.3)',
-                borderRadius: '26px', padding: '28px',
+                borderRadius: '18px', padding: '28px',
                 display: 'flex', flexDirection: 'column', gap: '20px',
               }}
               onClick={e => e.stopPropagation()}
@@ -582,15 +577,16 @@ const Dashboard = ({
         <div style={{
           position: 'absolute', inset: '0 16px', borderRadius: '12px',
           background: 'radial-gradient(circle at 50% 50%, rgba(255,183,77,0.12) 0%, rgba(94,230,255,0.06) 50%, transparent 100%)',
-          filter: 'blur(16px)', zIndex: -1, pointerEvents: 'none'
+          filter: 'blur(22px)', zIndex: -1, pointerEvents: 'none'
         }} />
         <form onSubmit={handleCreate} style={{ 
           display: 'flex', gap: '10px'
         }}>
           <div style={{
-            flex: 1, position: 'relative', display: 'flex', background: 'rgba(5, 6, 10, 0.65)',
-            border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px',
-            boxShadow: '0 0 24px rgba(255, 183, 77, 0.15)',
+            flex: 1, position: 'relative', display: 'flex', background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.14)', borderRadius: '12px',
+            boxShadow: '0 0 22px rgba(255,183,77,0.12)',
+            transition: 'border-color 0.2s'
           }}>
             <input
               value={newTripName} onChange={e => setNewTripName(e.target.value)}
@@ -599,13 +595,22 @@ const Dashboard = ({
                 width: '100%', background: 'transparent', border: 'none', padding: '0 18px', color: 'var(--text)',
                 fontSize: '0.95rem', outline: 'none', fontFamily: 'inherit', height: '48px', borderRadius: '12px'
               }}
+              onFocus={(e) => e.target.parentElement!.style.borderColor = 'rgba(255,183,77,0.5)'}
+              onBlur={(e) => e.target.parentElement!.style.borderColor = 'rgba(255,255,255,0.14)'}
             />
           </div>
           <button type="submit" disabled={!newTripName.trim() || creating || !isConnected} className="btn-primary" style={{
-            borderRadius: '12px', height: '48px',
-            padding: '0 24px', fontWeight: 700, fontSize: '0.95rem',
+            borderRadius: '12px', height: '48px', padding: '0 26px',
+            fontWeight: 600, fontSize: '0.95rem',
             opacity: newTripName.trim() && !creating && isConnected ? 1 : 0.4,
-          }}>
+            background: 'linear-gradient(180deg, #FFC46B, #E8963A)',
+            color: '#ffffff', border: 'none',
+            boxShadow: '0 6px 18px rgba(232,150,58,0.35)',
+            transform: 'translateY(0)'
+          }}
+          onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.transform = 'translateY(-1px)'; }}
+          onMouseLeave={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.transform = 'translateY(0)'; }}
+          >
             {creating ? '...' : 'Create'}
           </button>
         </form>
@@ -664,7 +669,7 @@ const LoginView = ({ onLogin }: { onLogin: (p: GoogleProfile) => void }) => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', background: 'var(--glass)', borderRadius: '999px', width: '100%', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', background: 'var(--glass)', borderRadius: '12px', width: '100%', justifyContent: 'center' }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: dbError ? 'var(--owe)' : dbReady ? 'var(--owed)' : '#444', boxShadow: dbReady ? '0 0 8px var(--owed)' : 'none' }} />
           <span style={{ fontSize: '0.75rem', color: dbError ? 'var(--owe)' : dbReady ? 'var(--owed)' : 'var(--text-dim)', fontWeight: 500 }}>
             {dbError ? `Error: ${dbError}` : dbReady ? 'Database connected' : 'Connecting…'}
@@ -674,7 +679,7 @@ const LoginView = ({ onLogin }: { onLogin: (p: GoogleProfile) => void }) => {
         <GoogleLogin
           onSuccess={handleSuccess}
           onError={() => toast.error('Google login failed')}
-          theme="filled_black" shape="pill" size="large" width="296" text="continue_with" useOneTap={false}
+          theme="filled_black" shape="rectangular" size="large" width="296" text="continue_with" useOneTap={false}
         />
       </motion.div>
     </div>

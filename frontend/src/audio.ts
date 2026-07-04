@@ -23,17 +23,17 @@ export class AudioService {
     const gain = this.ctx.createGain();
     
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(600, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.1);
+    osc.frequency.setValueAtTime(500, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1000, this.ctx.currentTime + 0.25);
     
     gain.gain.setValueAtTime(0, this.ctx.currentTime);
-    gain.gain.linearRampToValueAtTime(0.15, this.ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+    gain.gain.linearRampToValueAtTime(0.28, this.ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
     
     osc.connect(gain);
     gain.connect(this.masterGain);
     
     osc.start();
-    osc.stop(this.ctx.currentTime + 0.2);
+    osc.stop(this.ctx.currentTime + 0.25);
   }
 }
