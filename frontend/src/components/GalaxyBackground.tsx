@@ -14,7 +14,7 @@
  */
 import { useMemo, useRef, useState, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Points, PointMaterial, OrbitControls, Html } from '@react-three/drei';
+import { Points, PointMaterial, OrbitControls, Html, Preload } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { LiveDebtConstellation } from './LiveDebtConstellation';
@@ -97,7 +97,7 @@ const SwirlingGalaxy = ({
       const radius = 0.45 * Math.exp(0.15 * t);
       const angle = branchAngle + t;
 
-      const scatter = Math.random() * (radius * 0.35) + 0.1;
+      const scatter = Math.random() * (radius * 0.22);
       const sx = (Math.random() - 0.5) * scatter;
       const sy = (Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1)) * (0.8 + radius * 0.1);
       const sz = (Math.random() - 0.5) * scatter;
@@ -108,7 +108,7 @@ const SwirlingGalaxy = ({
       
       const intensity = Math.max(0, 1 - Math.pow(radius / 9, 1.2));
       temp.lerpColors(cEdge, cCore, intensity);
-      if (radius < 2.5) temp.lerp(white, 1 - radius / 2.5);
+      if (radius < 2.5) temp.lerp(white, (1 - radius / 2.5) * 0.85);
       
       c[i * 3] = temp.r; c[i * 3 + 1] = temp.g; c[i * 3 + 2] = temp.b;
     }
@@ -148,13 +148,13 @@ const SwirlingGalaxy = ({
       const s = 0.96 + e * (targetScale - 0.96);
       ref.current.scale.set(s, s, s);
       mat.opacity = e * targetOpacity;
-      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * 0.35;
-      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.12;
+      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.22 / Math.max(targetOpacity, 0.001));
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.08 / Math.max(targetOpacity, 0.001));
     } else {
       ref.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.04);
       mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
-      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * 0.35;
-      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.12;
+      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.22 / Math.max(targetOpacity, 0.001));
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.08 / Math.max(targetOpacity, 0.001));
     }
   });
 
@@ -176,11 +176,11 @@ const SwirlingGalaxy = ({
           />
         </Points>
         {/* Core Glow */}
-        <sprite ref={spriteRef1} scale={[4.5, 4.5, 1]} position={[0, 0, 0]}>
+        <sprite ref={spriteRef1} scale={[3.5, 3.5, 1]} position={[0, 0, 0]}>
           <spriteMaterial map={sharedGlowTex} color={coreColor} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
         </sprite>
         {/* Nebula Haze */}
-        <sprite ref={spriteRef2} scale={[12, 12, 1]} position={[0, -0.5, 0]}>
+        <sprite ref={spriteRef2} scale={[9, 9, 1]} position={[0, -0.5, 0]}>
           <spriteMaterial map={sharedGlowTex} color={edgeColor} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
         </sprite>
       </group>
@@ -255,9 +255,10 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
   useFrame((_, delta) => {
     if (!ref.current) return;
     const mat = ref.current.material as THREE.PointsMaterial;
-    const targetOpacity = activeTripId ? 0 : 0.85;
+    const targetOpacity = activeTripId ? 0 : 0.4;
     mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
-    ref.current.rotation.y += delta * 0.005; // slow global drift
+    ref.current.rotation.y += delta * 0.018; // slow global drift
+    ref.current.rotation.x += delta * 0.004;
 
   });
 
@@ -265,7 +266,7 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
 
   return (
     <Points ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}>
-      <PointMaterial transparent vertexColors size={0.5} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
+      <PointMaterial transparent vertexColors size={0.35} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
     </Points>
   );
 };
@@ -336,7 +337,7 @@ const GalaxyScene = ({
     if (activeTripId) {
       const activeTripIndex = trips.findIndex(t => t.id === activeTripId);
       const angle = (activeTripIndex / Math.max(trips.length, 1)) * Math.PI * 2;
-      const r = Math.max(11, 8 + trips.length * 1.5);
+      const r = Math.max(8, 6 + trips.length * 1.2);
       const pos = new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
       
       targetPos.current = new THREE.Vector3(pos.x, pos.y + 4, pos.z + 12);
@@ -344,7 +345,7 @@ const GalaxyScene = ({
       const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
     } else {
-      targetPos.current = new THREE.Vector3(0, 9, 26);
+      targetPos.current = new THREE.Vector3(0, 7, 19);
       setSettling(true); setSettled(false);
       const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
@@ -355,7 +356,7 @@ const GalaxyScene = ({
   const tripPositions = useMemo(() => {
     return trips.map((trip, idx) => {
       const angle = (idx / Math.max(trips.length, 1)) * Math.PI * 2;
-      const r = Math.max(11, 8 + trips.length * 1.5);
+      const r = Math.max(8, 6 + trips.length * 1.2);
       return {
         trip,
         pos: new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r),
@@ -513,11 +514,12 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
     }}>
       <ErrorBoundary fallback={<CosmosFallback trips={trips} onSelectTrip={onSelectTrip} />}>
         <Canvas
-          camera={{ position: [0, 9, 26], fov: 50 }}
+          camera={{ position: [0, 7, 19], fov: 50 }}
           dpr={[1, 1.5]}
           frameloop={uiPaused ? 'never' : 'always'}
           style={{ pointerEvents: uiPaused ? 'none' : 'all' }}
         >
+          <Preload all />
           <GalaxyScene
             activeTripId={activeTripId}
             trips={trips}

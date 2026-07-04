@@ -180,7 +180,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 300,
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '24px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
       pointerEvents: 'all',
     }}>
       <motion.div

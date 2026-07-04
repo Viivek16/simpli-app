@@ -75,10 +75,10 @@ interface EditPayload {
 }
 
 const TripRoom = ({
-  trip, onBack, profile, onOverlayChange, selectedMemberId
+  trip, onBack, profile, onOverlayChange, selectedMemberId, onStarClick
 }: {
   trip: Trip; onBack: () => void; profile: GoogleProfile;
-  onOverlayChange: (v: boolean) => void; selectedMemberId: string | null;
+  onOverlayChange: (v: boolean) => void; selectedMemberId: string | null; onStarClick: (id: string | null) => void;
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [editPayload, setEditPayload] = useState<EditPayload | null>(null);
@@ -249,12 +249,16 @@ const TripRoom = ({
     return { net, details: result.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount)) };
   }, [localId, tripExpenses, splits, tripMembers]);
 
-  // Use memberBalances for localId to display in the header
-  const myBalance = memberBalances?.net || 0;
-
-
-
-  return (
+  // B1: Contextual balance header
+  const headerContext = useMemo(() => {
+    if (!selectedMemberId || selectedMemberId === localId) {
+      return { type: 'overall', amount: memberBalances?.net || 0, name: '' };
+    }
+    const otherName = userMap.get(selectedMemberId) || 'Member';
+    const firstName = otherName.split(' ')[0];
+    const match = memberBalances?.details.find(d => d.otherId === selectedMemberId);
+    return { type: 'pair', amount: match ? match.amount : 0, name: firstName };
+  }, [selectedMemberId, localId, memberBalances, userMap]);  return (
     <motion.div
       key="trip-room"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -306,22 +310,27 @@ const TripRoom = ({
       {/* Bottom Actions */}
       <div style={{
         position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'all',
-        display: 'flex', alignItems: 'center', gap: '16px', zIndex: 20
+        display: 'flex', alignItems: 'center', gap: '12px', zIndex: 20
       }}>
         <button onClick={copyInvite} className="btn-secondary" style={{ 
-          padding: '0 20px', height: '48px', borderRadius: '12px', minWidth: '150px',
+          padding: '0', height: '48px', borderRadius: '12px', minWidth: '160px',
+          background: 'var(--glass)', border: '1px solid rgba(255,255,255,0.14)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+          color: '#ffffff', fontSize: '0.95rem', fontWeight: 600
         }}
         title="Invite">
-           <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
+           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
            {copied ? 'Copied' : 'Invite'}
         </button>
 
         <button onClick={() => { AudioService.playBlip(); setEditPayload(null); setShowModal(true); }} className="btn-primary" style={{ 
-          padding: '0 20px', height: '48px', borderRadius: '12px', minWidth: '150px', color: '#ffffff',
-          background: 'linear-gradient(180deg, #FFC46B, #E8963A)', boxShadow: '0 6px 18px rgba(232,150,58,0.35)', border: 'none'
+          padding: '0', height: '48px', borderRadius: '12px', minWidth: '160px',
+          background: 'linear-gradient(180deg, #FFC46B, #E8963A)', border: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+          color: '#ffffff', fontSize: '0.95rem', fontWeight: 600, boxShadow: '0 6px 18px rgba(232,150,58,0.35)'
         }}>
-          <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-          <span style={{ fontWeight: 600 }}>Add expense</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          Add expense
         </button>
       </div>
 
@@ -332,10 +341,42 @@ const TripRoom = ({
         background: 'rgba(5, 6, 10, 0.65)', borderRadius: '18px'
       }}>
         <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Your Balance</div>
-          <div className="money" style={{ fontSize: '1.2rem', fontWeight: 600, color: myBalance === 0 ? 'var(--text-dim)' : myBalance > 0 ? 'var(--owed)' : 'var(--owe)' }}>
-            {myBalance === 0 ? 'Settled up' : (myBalance > 0 ? `You're owed ${INR(Math.abs(myBalance))}` : `You owe ${INR(Math.abs(myBalance))}`)}
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {headerContext.type === 'overall' ? 'Your Balance' : `${headerContext.name}'s Balance with you`}
           </div>
+          <div className="money" style={{ fontSize: '1.2rem', fontWeight: 600, color: headerContext.amount === 0 ? 'var(--text-dim)' : headerContext.amount > 0 ? 'var(--owed)' : 'var(--owe)' }}>
+            {headerContext.amount === 0 ? (headerContext.type === 'overall' ? 'Settled up' : `Settled with ${headerContext.name}`) : (headerContext.amount > 0 ? (headerContext.type === 'overall' ? `You're owed ${INR(Math.abs(headerContext.amount))}` : `${headerContext.name} owes you ${INR(Math.abs(headerContext.amount))}`) : (headerContext.type === 'overall' ? `You owe ${INR(Math.abs(headerContext.amount))}` : `You owe ${headerContext.name} ${INR(Math.abs(headerContext.amount))}`))}
+          </div>
+        </div>
+
+        {/* B2: Settle up rows */}
+        <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Balances</div>
+          {(memberBalances?.details.length || 0) === 0 ? (
+            <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>All settled ✓</div>
+          ) : (
+            memberBalances?.details.map(d => {
+              const otherName = userMap.get(d.otherId) || 'Member';
+              const firstName = otherName.split(' ')[0];
+              const isPositive = d.amount > 0;
+              return (
+                <div key={d.otherId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: '0.85rem', color: isPositive ? 'var(--owed)' : 'var(--owe)' }}>
+                    {isPositive ? `${firstName} owes you ${INR(Math.abs(d.amount))}` : `You owe ${firstName} ${INR(Math.abs(d.amount))}`}
+                  </div>
+                  <button onClick={async () => {
+                    const payerId = isPositive ? d.otherId : localId;
+                    const payeeId = isPositive ? localId : d.otherId;
+                    try {
+                      await (StDB.conn as any).reducers.settleDebt({ tripId: trip.id, debtorId: payerId, payeeId: payeeId, amount: Math.abs(d.amount) });
+                      AudioService.playBlip();
+                      toast.success('Settled up!');
+                    } catch (e: any) { toast.error(e?.message || 'Failed'); }
+                  }} style={{ background: 'transparent', border: '1px solid var(--self)', color: '#ffffff', borderRadius: '12px', height: '34px', padding: '0 12px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Settle</button>
+                </div>
+              );
+            })
+          )}
         </div>
 
         <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--glass-brd)' }}>
@@ -493,6 +534,76 @@ const TripRoom = ({
           </div>
         )}
       </AnimatePresence>
+      {/* B3: DOM Popup for selected star */}
+      <AnimatePresence>
+        {selectedMemberId && (
+          <motion.div
+            initial={{ opacity: 0, x: 20, scale: 0.95 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 20, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 24, stiffness: 350 }}
+            style={{
+              position: 'fixed', top: '50%', right: '380px', transform: 'translateY(-50%)',
+              background: 'rgba(10, 12, 16, 0.85)', backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255,255,255,0.15)', borderRadius: '12px',
+              padding: '20px', width: '220px', zIndex: 30,
+              boxShadow: '0 16px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', pointerEvents: 'all'
+            }}
+          >
+            <div style={{ position: 'absolute', top: '50%', left: '-6px', transform: 'translateY(-50%) rotate(45deg)', width: '12px', height: '12px', background: 'rgba(10, 12, 16, 0.85)', borderBottom: '1px solid rgba(255,255,255,0.15)', borderLeft: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(20px)' }} />
+            <button onClick={() => onStarClick(null)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1 }}>&times;</button>
+            <div style={{ width: '100%', textAlign: 'center', marginTop: '8px' }}>
+              <div style={{ color: 'var(--text)', fontSize: '1.1rem', fontWeight: 700, fontFamily: 'Satoshi, sans-serif' }}>
+                {selectedMemberId === localId ? 'You' : userMap.get(selectedMemberId) || 'Member'}
+              </div>
+              {selectedMemberId !== localId && (
+                <>
+                  <div style={{ marginTop: '8px', fontSize: '0.85rem', color: 'var(--text-dim)' }}>
+                    {Math.abs(headerContext.amount) < 0.5 ? 'Settled up with you' : headerContext.amount > 0 ? 'Owes you' : 'You owe'}
+                  </div>
+                  {Math.abs(headerContext.amount) > 0.5 && (
+                    <div className="money" style={{ fontSize: '1.4rem', fontWeight: 700, color: headerContext.amount > 0 ? 'var(--owed)' : 'var(--owe)' }}>
+                      {INR(Math.abs(headerContext.amount))}
+                    </div>
+                  )}
+                </>
+              )}
+              {selectedMemberId === localId && (
+                <>
+                  <div style={{ marginTop: '8px', fontSize: '0.85rem', color: 'var(--text-dim)' }}>Total Net Balance</div>
+                  <div className="money" style={{ fontSize: '1.4rem', fontWeight: 700, color: headerContext.amount === 0 ? 'var(--text-dim)' : headerContext.amount > 0 ? 'var(--owed)' : 'var(--owe)' }}>
+                    {headerContext.amount > 0 ? '+' : ''}{INR(headerContext.amount)}
+                  </div>
+                </>
+              )}
+            </div>
+            {selectedMemberId !== localId && Math.abs(headerContext.amount) > 0.5 && (
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const payerId = headerContext.amount > 0 ? selectedMemberId : localId;
+                  const payeeId = headerContext.amount > 0 ? localId : selectedMemberId;
+                  try {
+                    await (StDB.conn as any).reducers.settleDebt({ tripId: trip.id, debtorId: payerId, payeeId: payeeId, amount: Math.abs(headerContext.amount) });
+                    AudioService.playBlip();
+                    toast.success('Settled up!');
+                    onStarClick(null);
+                  } catch (e: any) { toast.error(e?.message || 'Failed'); }
+                }}
+                className="btn-primary"
+                style={{
+                  width: '100%', padding: '10px 0', borderRadius: '12px', fontSize: '0.9rem', fontWeight: 700,
+                  background: 'rgba(255,255,255,0.95)', color: '#000', boxShadow: '0 4px 12px rgba(255,255,255,0.15)'
+                }}
+              >
+                Settle up
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </motion.div>
   );
 };
@@ -600,16 +711,16 @@ const Dashboard = ({
             />
           </div>
           <button type="submit" disabled={!newTripName.trim() || creating || !isConnected} className="btn-primary" style={{
-            borderRadius: '12px', height: '48px', padding: '0 26px',
+            borderRadius: '12px', height: '48px', padding: '0 28px',
             fontWeight: 600, fontSize: '0.95rem',
-            opacity: newTripName.trim() && !creating && isConnected ? 1 : 0.4,
+            opacity: newTripName.trim() && !creating && isConnected ? 1 : 0.55,
             background: 'linear-gradient(180deg, #FFC46B, #E8963A)',
             color: '#ffffff', border: 'none',
             boxShadow: '0 6px 18px rgba(232,150,58,0.35)',
             transform: 'translateY(0)'
           }}
-          onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onMouseLeave={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.transform = 'translateY(0)'; }}
+          onMouseEnter={(e) => { if (!e.currentTarget.disabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(232,150,58,0.45)'; } }}
+          onMouseLeave={(e) => { if (!e.currentTarget.disabled) { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(232,150,58,0.35)'; } }}
           >
             {creating ? '...' : 'Create'}
           </button>
@@ -829,6 +940,7 @@ function App() {
                   onBack={() => { selectTrip(null); setSelectedMemberId(null); setOverlayOpen(false); }}
                   onOverlayChange={setOverlayOpen}
                   selectedMemberId={selectedMemberId}
+                  onStarClick={setSelectedMemberId}
                 />
               ) : (
                 <Dashboard

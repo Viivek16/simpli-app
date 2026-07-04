@@ -10,11 +10,10 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { Html, Line } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import * as THREE from 'three';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import { useTripMember } from '../hooks/useTrips';
-import { toast } from './Toast';
 import * as StDB from '../spacetimedb';
 import { AudioService } from '../audio';
 
@@ -160,7 +159,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
 
   // B1: Smooth Fly-in & Living Constellation (drift/bob)
   useFrame((_, delta) => {
-    if (!ref.current || _settling) return;
+    if (!ref.current) return;
     ref.current.rotation.y += delta * 0.06;            // continuous slow orbit
     const t = performance.now() / 1000;
     ref.current.children.forEach((child) => {
@@ -169,24 +168,34 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
         if (typeof baseY === 'number') child.position.y = baseY + Math.sin(t * 0.9 + child.userData.seed) * 0.25;
       }
     });
-  });
 
-  // Helper for settling debt in popup
-  const handleSettle = async (otherId: string, amount: number) => {
-    const payerId = amount > 0 ? otherId : localId;
-    const payeeId = amount > 0 ? localId : otherId;
-    const settleAmt = Math.abs(amount);
-
-    const c = StDB.conn as any;
-    if (!c) return;
-    try {
-      await c.reducers.settleDebt({ tripId: activeTripId, debtorId: payerId, payeeId, amount: settleAmt });
-      AudioService.playBlip();
-      toast.success('Settled up!');
-    } catch (e: any) {
-      toast.error(e?.message ?? 'Failed to settle debt');
+    if (ref.current.userData.fade === undefined) {
+      ref.current.userData.fade = 0;
+      ref.current.userData.mountTime = t;
+      ref.current.traverse((child: any) => {
+        if (child.userData && child.userData.baseOpacity !== undefined && child.material) {
+           child.material.transparent = true;
+           child.material.opacity = 0;
+        }
+      });
     }
-  };
+
+    const elapsed = t - ref.current.userData.mountTime;
+    const fadeStart = 1.0;
+    const fadeEnd = 1.3;
+    let targetFade = 0;
+    if (elapsed > fadeEnd || !_settling) targetFade = 1;
+    else if (elapsed > fadeStart) targetFade = (elapsed - fadeStart) / (fadeEnd - fadeStart);
+
+    if (ref.current.userData.fade !== targetFade) {
+      ref.current.userData.fade = targetFade;
+      ref.current.traverse((child: any) => {
+        if (child.userData && child.userData.baseOpacity !== undefined && child.material) {
+           child.material.opacity = child.userData.baseOpacity * targetFade;
+        }
+      });
+    }
+  });
 
   // Close popup on Escape
   useEffect(() => {
@@ -212,9 +221,6 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
 
         const labelColor = settled ? '#6b7280' : node.netDebt < 0 ? '#d98a6c' : '#6fba8a';
         const isSelected = selectedMemberId === node.id;
-        const myPairDebt = owes[localId]?.[node.id] || 0;
-        const theirPairDebt = owes[node.id]?.[localId] || 0;
-        const pairNet = theirPairDebt - myPairDebt; // > 0 means they owe me
 
         return (
           <group key={node.id} position={node.position} name="star-group" userData={{ baseY: node.position.y, seed: i * 2.1 }}>
@@ -229,7 +235,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
             </mesh>
 
             {/* Core star sphere */}
-            <mesh>
+            <mesh userData={{ baseOpacity: 1 }}>
               <sphereGeometry args={[0.42, 32, 32]} />
               <meshStandardMaterial
                 color={coreColor}
@@ -238,6 +244,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
                 roughness={settled ? 0.8 : 0.05}
                 metalness={0}
                 toneMapped={false}
+                transparent
               />
             </mesh>
 
@@ -245,7 +252,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
             {!settled && (
               <group>
                 {/* Inner bright halo */}
-                <sprite raycast={() => null} scale={[1.8 + ratio * 2.2, 1.8 + ratio * 2.2, 1]}>
+                <sprite raycast={() => null} scale={[1.8 + ratio * 2.2, 1.8 + ratio * 2.2, 1]} userData={{ baseOpacity: 0.1 + ratio * 0.15 }}>
                   <spriteMaterial
                     map={haloTexture}
                     color={color}
@@ -254,7 +261,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
                   />
                 </sprite>
                 {/* Outer soft halo */}
-                <sprite raycast={() => null} scale={[3.0 + ratio * 3.5, 3.0 + ratio * 3.5, 1]}>
+                <sprite raycast={() => null} scale={[3.0 + ratio * 3.5, 3.0 + ratio * 3.5, 1]} userData={{ baseOpacity: (0.1 + ratio * 0.15) * 0.4 }}>
                   <spriteMaterial
                     map={haloTexture}
                     color={color}
@@ -272,7 +279,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
 
             {/* Settled planet ring */}
             {settled && (
-              <mesh raycast={() => null} rotation={[Math.PI / 2.3, 0, 0]}>
+              <mesh raycast={() => null} rotation={[Math.PI / 2.3, 0, 0]} userData={{ baseOpacity: 0.55 }}>
                 <torusGeometry args={[0.7, 0.025, 12, 48]} />
                 <meshBasicMaterial color="#6b7280" transparent opacity={0.55} toneMapped={false} />
               </mesh>
@@ -305,63 +312,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
               </Html>
             )}
 
-            {/* Futuristic Popup */}
-            {isSelected && (
-              <Html center distanceFactor={14} zIndexRange={[100, 0]} style={{ pointerEvents: 'all' }}>
-                <AnimatePresence>
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.85, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                    transition={{ type: 'spring', damping: 24, stiffness: 350 }}
-                    style={{
-                      background: 'rgba(10, 12, 16, 0.85)', backdropFilter: 'blur(20px)',
-                      border: '1px solid rgba(255,255,255,0.15)', borderRadius: '18px',
-                      padding: '20px', width: '220px',
-                      boxShadow: '0 16px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
-                      marginTop: '110px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
-                    }}
-                  >
-                    <div style={{ width: '100%', textAlign: 'center' }}>
-                      <div style={{ color: 'var(--text)', fontSize: '1.1rem', fontWeight: 700, fontFamily: 'Satoshi, sans-serif' }}>
-                        {isLocal ? 'You' : node.name}
-                      </div>
-                      {!isLocal && (
-                        <div style={{ marginTop: '8px', fontSize: '0.85rem', color: 'var(--text-dim)' }}>
-                          {Math.abs(pairNet) < 0.5 ? 'Settled up with you' : pairNet > 0 ? 'Owes you' : 'You owe'}
-                        </div>
-                      )}
-                      {!isLocal && Math.abs(pairNet) > 0.5 && (
-                        <div className="money" style={{ fontSize: '1.4rem', fontWeight: 700, color: pairNet > 0 ? 'var(--owed)' : 'var(--owe)' }}>
-                          {INR(Math.abs(pairNet))}
-                        </div>
-                      )}
-                      {isLocal && (
-                        <>
-                          <div style={{ marginTop: '8px', fontSize: '0.85rem', color: 'var(--text-dim)' }}>Total Net Balance</div>
-                          <div className="money" style={{ fontSize: '1.4rem', fontWeight: 700, color: labelColor }}>
-                            {node.netDebt > 0 ? '+' : ''}{INR(node.netDebt)}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    
-                    {!isLocal && Math.abs(pairNet) > 0.5 && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleSettle(node.id, pairNet); onStarClick(null); }}
-                        className="btn-primary"
-                        style={{
-                          width: '100%', padding: '10px 0', borderRadius: '12px', fontSize: '0.9rem', fontWeight: 700,
-                          background: 'rgba(255,255,255,0.95)', color: '#000', boxShadow: '0 4px 12px rgba(255,255,255,0.15)'
-                        }}
-                      >
-                        Settle up
-                      </button>
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-              </Html>
-            )}
+            {/* Futuristic Popup removed from here */}
           </group>
         );
       })}
@@ -398,6 +349,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
               transparent
               opacity={0.18 + ratio * 0.4}
               toneMapped={false}
+              userData={{ baseOpacity: 0.18 + ratio * 0.4 }}
             />
           );
         })
