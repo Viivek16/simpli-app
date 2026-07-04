@@ -156,3 +156,28 @@ button:focus-visible, input:focus-visible {
 .btn-ghost:hover {
   color: var(--text);
 }
+
+/* Expense actions hover logic */
+.expense-actions {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: all var(--dur-micro) var(--ease-app);
+}
+
+@media (hover: hover) {
+  .expense-row:hover .expense-actions {
+    opacity: 1;
+    pointer-events: all;
+    transform: translateY(0);
+  }
+}
+
+/* Always show on touch devices */
+@media (hover: none) {
+  .expense-actions {
+    opacity: 1;
+    pointer-events: all;
+    transform: translateY(0);
+  }
+}

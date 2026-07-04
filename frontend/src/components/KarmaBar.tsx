@@ -62,12 +62,13 @@ export const KarmaBar = ({ tripId }: Props) => {
 
   const isPos = netBalance > 0.5;
   const isNeg = netBalance < -0.5;
-  const label = isPos ? `You're owed ${INR(netBalance)}` : isNeg ? `You owe ${INR(Math.abs(netBalance))}` : 'All settled up';
+  const amtStr = INR(Math.abs(netBalance));
+  const label = isPos ? `+${amtStr}` : isNeg ? `-${amtStr}` : '₹0';
 
   return (
-    <div style={{ width: '100%' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '12px' }}>
-        <span style={{ fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: '4px' }}>
+    <div style={{ width: '100%', padding: '0 4px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '14px' }}>
+        <span style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: '8px' }}>
           Karma Balance
         </span>
         <motion.span
@@ -76,7 +77,7 @@ export const KarmaBar = ({ tripId }: Props) => {
           transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
           className="money"
           style={{
-            fontSize: '1.75rem', fontWeight: 700,
+            fontSize: '1.45rem', fontWeight: 700,
             color: isPos ? 'var(--owed)' : isNeg ? 'var(--owe)' : 'var(--text-dim)',
             lineHeight: 1, letterSpacing: '-0.02em'
           }}

@@ -7,7 +7,7 @@
  * - Debt lines use drei <Line> with dashed prop (Phase 2.2)
  * - Star halo = cheap additive-blending sprite, not a large transparent sphere
  */
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { Html, Line } from '@react-three/drei';
 import { motion } from 'framer-motion';
 import * as THREE from 'three';
@@ -28,18 +28,20 @@ const identityStr = (u: any): string => {
   return norm(u.id);
 };
 
-interface Props {
+interface LDCProps {
   activeTripId: string;
   hoveredStar: string | null;
   onStarHover: (id: string | null) => void;
   onStarClick: (id: string | null) => void;
+  settling?: boolean;
 }
 
-export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, onStarClick }: Props) => {
+export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar, onStarHover, onStarClick, settling: _settling }: LDCProps) => {
   const allUsers = useUser();
   const tripMemberIds = useTripMember(activeTripId);
   const splits = useExpenseSplit();
   const expenses = useExpense();
+  const ref = useRef<THREE.Group>(null);
 
   const localId = norm(StDB.localIdentity ?? '');
 
@@ -142,8 +144,8 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
     const ctx = canvas.getContext('2d')!;
     const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
     gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.55)');
-    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.18)');
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.4)');
+    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.1)');
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 64, 64);
@@ -153,7 +155,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
   }, []);
 
   return (
-    <group>
+    <group ref={ref}>
       {/* Stars */}
       {nodes.map(node => {
         const isLocal = node.id === localId;
@@ -161,8 +163,8 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
         const ratio = Math.min(Math.abs(node.netDebt) / maxNetDebt, 1);
         const color = isLocal ? '#FFB74D' : '#5EE6FF';
 
-        // Emissive scales with debt ratio per spec
-        const emissiveIntensity = settled ? 0.4 : (1.4 + ratio * 4.5);
+        // Emissive scales with debt ratio per spec (softer glow)
+        const emissiveIntensity = settled ? 0.2 : (0.8 + ratio * 2.0);
         const coreColor = settled ? '#9aa0aa' : color;
 
         const labelColor = settled ? '#6b7280' : node.netDebt < 0 ? '#d98a6c' : '#6fba8a';
@@ -194,7 +196,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
                   <spriteMaterial
                     map={haloTexture}
                     color={color}
-                    transparent opacity={0.16 + ratio * 0.30}
+                    transparent opacity={0.1 + ratio * 0.15}
                     blending={THREE.AdditiveBlending} depthWrite={false}
                   />
                 </sprite>
@@ -203,7 +205,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
                   <spriteMaterial
                     map={haloTexture}
                     color={color}
-                    transparent opacity={(0.16 + ratio * 0.30) * 0.4}
+                    transparent opacity={(0.1 + ratio * 0.15) * 0.4}
                     blending={THREE.AdditiveBlending} depthWrite={false}
                   />
                 </sprite>
@@ -212,7 +214,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
 
             {/* Point light to illuminate nearby lines */}
             {!settled && (
-              <pointLight color={color} intensity={1 + ratio * 2.5} distance={9} decay={2} />
+              <pointLight color={color} intensity={0.5 + ratio * 1.5} distance={9} decay={2} />
             )}
 
             {/* Settled planet ring */}
@@ -272,19 +274,16 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
           const amount = Math.max(ab, ba);
           if (amount < 0.5) return null;
 
-          const r = amount / maxPairDebt;
-          const dimmed = hoveredStar && hoveredStar !== a.id && hoveredStar !== b.id;
-          const lineColor = '#FFFFFF';
-          const lineOpacity = dimmed ? 0.3 : (0.22 + r * 0.5);
-
+          const ratio = amount / maxPairDebt;
+          
           return (
             <Line
               key={`${a.id}-${b.id}`}
               points={[a.position, b.position]}
-              color={lineColor}
-              lineWidth={1 + r * 5}
+              color="#ffffff"
+              lineWidth={0.7 + ratio * 3.0}
               transparent
-              opacity={lineOpacity}
+              opacity={0.2 + ratio * 0.45}
               toneMapped={false}
             />
           );

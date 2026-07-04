@@ -42,12 +42,13 @@ const tripColor = (id: string) => PALETTE[hashId(id) % PALETTE.length];
 const PARTICLE_COUNT = 7500;
 
 const SwirlingGalaxy = ({
-  position, colorCoreStr, colorEdgeStr, onClick, name, hovered, selected, hidden
+  position, colorCoreStr, colorEdgeStr, onClick, name, hovered, selected, hidden, index
 }: {
   position: THREE.Vector3; colorCoreStr: string; colorEdgeStr: string;
-  onClick?: () => void; name?: string; hovered?: boolean; selected?: boolean; hidden?: boolean;
+  onClick?: () => void; name?: string; hovered?: boolean; selected?: boolean; hidden?: boolean; index: number;
 }) => {
   const ref = useRef<THREE.Points>(null);
+  const mountTime = useRef<number | null>(null);
 
   const { positions, colors } = useMemo(() => {
     const p = new Float32Array(PARTICLE_COUNT * 3);
@@ -77,22 +78,44 @@ const SwirlingGalaxy = ({
     return { positions: p, colors: c };
   }, [colorCoreStr, colorEdgeStr]);
 
-  // Slow self-rotation + streak effect
-  useFrame((_state, _delta) => {
-    if (ref.current) {
-      ref.current.rotation.y += hovered || selected ? 0.003 : 0.0005;
-      const targetScale = selected ? 1.4 : (hovered ? 1.06 : 1.0);
+  // Slow self-rotation + streak effect + stagger intro
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    const mat = ref.current.material as THREE.PointsMaterial;
+    
+    // Stagger fade logic (only on first mount)
+    if (mountTime.current === null) {
+      // 1-frame delay trick
+      mountTime.current = clock.getElapsedTime() + 0.016; 
+      mat.opacity = 0;
+      ref.current.scale.set(0.96, 0.96, 0.96);
+      return;
+    }
+
+    const elapsed = clock.getElapsedTime() - mountTime.current;
+    const delay = index * 0.090; // ~90ms stagger
+    
+    let e = 1;
+    if (elapsed < delay) {
+      e = 0;
+    } else if (elapsed - delay < 0.520) {
+      const t = (elapsed - delay) / 0.520;
+      e = 1 - Math.pow(1 - t, 4); // cubic-bezier(0.22, 1, 0.36, 1) approx
+    }
+    
+    ref.current.rotation.y += hovered || selected ? 0.003 : 0.0005;
+    const targetScale = selected ? 1.4 : (hovered ? 1.06 : 1.0);
+    
+    // Lerp scale and opacity if fully loaded, otherwise use 'e'
+    if (e < 1) {
+      const s = 0.96 + e * 0.04 * targetScale;
+      ref.current.scale.set(s, s, s);
+      mat.opacity = e * (hidden ? 0 : (selected ? 0.0 : 0.85));
+    } else {
       ref.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.04);
-      
-      const mat = ref.current.material as THREE.PointsMaterial;
-      const targetOpacity = hidden ? 0 : (selected ? 0.0 : 0.85); // Selected also fades to 0 as it settles? Wait, the prompt says "radial motion blur feel via brief point-size + opacity ramp".
+      const targetOpacity = hidden ? 0 : (selected ? 0.0 : 0.85);
       mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
     }
-  });
-
-  // Slow self-rotation — only permitted useFrame work per Rule 7
-  useFrame(() => {
-    if (ref.current) ref.current.rotation.y += hovered ? 0.004 : 0.0008;
   });
 
   return (
@@ -121,12 +144,52 @@ const SwirlingGalaxy = ({
             backdropFilter: 'blur(6px)',
             border: '1px solid var(--glass-brd)',
             fontWeight: 600, fontSize: '1rem',
-            transition: 'color 200ms ease, background 200ms ease',
+            transition: 'color 200ms ease, background 200ms ease, opacity 200ms ease',
+            opacity: hidden ? 0 : 1,
             whiteSpace: 'nowrap', marginTop: '-60px'
           }}>{name}</div>
         </Html>
       )}
     </group>
+  );
+};
+
+// ─── Background Starfield ───────────────────────────────────────────────────
+const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string | null; settled: boolean }) => {
+  const ref = useRef<THREE.Points>(null);
+  
+  const { positions, colors } = useMemo(() => {
+    const p = new Float32Array(2500 * 3);
+    const c = new Float32Array(2500 * 3);
+    for (let i = 0; i < 2500; i++) {
+      const r = 160 + Math.random() * 40;
+      const theta = 2 * Math.PI * Math.random();
+      const phi = Math.acos(2 * Math.random() - 1);
+      p[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      p[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      p[i * 3 + 2] = r * Math.cos(phi);
+      
+      const v = 0.4 + Math.random() * 0.4;
+      c[i * 3] = v; c[i * 3 + 1] = v; 
+      c[i * 3 + 2] = v + (Math.random() < 0.2 ? 0.2 : 0);
+    }
+    return { positions: p, colors: c };
+  }, []);
+
+  useFrame(() => {
+    if (!ref.current) return;
+    const mat = ref.current.material as THREE.PointsMaterial;
+    const targetOpacity = activeTripId ? 0 : 0.6;
+    mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
+    ref.current.rotation.y += 0.0001; // subtle depth rotation
+  });
+
+  if (activeTripId && settled) return null;
+
+  return (
+    <Points ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}>
+      <PointMaterial transparent vertexColors size={0.3} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
+    </Points>
   );
 };
 
@@ -238,6 +301,8 @@ const GalaxyScene = ({
       {/* Camera fly-in: only runs during settle window */}
       <CameraAnimator targetPos={targetPos.current} settling={settling && !settled} />
 
+      <BackgroundStarfield activeTripId={activeTripId} settled={settled} />
+
       <ErrorBoundary fallback={null}>
         {activeTripId && (
           /* ── Micro View: constellation fades in ── */
@@ -246,27 +311,29 @@ const GalaxyScene = ({
             hoveredStar={hoveredStar}
             onStarHover={onStarHover}
             onStarClick={onStarClick}
+            settling={settling && !settled}
           />
         )}
         
-        {/* ── Macro View: galaxy ring fades out when activeTripId is set ── */
-        tripPositions.map(({ trip, pos, cols }) => (
+        {/* ── Macro View: galaxy ring fades out when activeTripId is set ── */}
+        {!(activeTripId && settled) && tripPositions.map(({ trip, pos, cols }, idx) => (
           <SwirlingGalaxy
             key={trip.id}
+            index={idx}
             position={pos}
             colorCoreStr={cols.core}
             colorEdgeStr={cols.edge}
             name={trip.name}
             hovered={hoveredGalaxy?.id === trip.id}
             selected={activeTripId === trip.id}
-            hidden={activeTripId !== null && activeTripId !== trip.id}
+            hidden={activeTripId !== null}
             onClick={() => onSelectTrip(trip)}
           />
         ))}
       </ErrorBoundary>
 
       <EffectComposer>
-        <Bloom luminanceThreshold={0.1} mipmapBlur luminanceSmoothing={0.9} intensity={1.5} />
+        <Bloom luminanceThreshold={0.12} mipmapBlur luminanceSmoothing={0.9} intensity={1.15} />
       </EffectComposer>
     </>
   );

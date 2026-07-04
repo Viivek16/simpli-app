@@ -19,6 +19,8 @@ const S: Record<string, React.CSSProperties> = {
   },
 };
 
+const norm = (s: any) => String(s ?? '').toLowerCase().trim();
+
 type SplitMode = 'equally' | 'unequal' | 'shares' | 'personal';
 
 interface MemberRow { id: string; name: string; }
@@ -55,6 +57,8 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
   const [mode, setMode] = useState<SplitMode>(inferMode);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const localId = norm(StDB.localIdentity ?? '');
 
   // Selected participants (default: all members)
   const [selected, setSelected] = useState<Set<string>>(() => {
@@ -219,6 +223,8 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
           maxHeight: '70vh', overflowY: 'auto',
           borderRadius: '26px 26px 0 0', padding: '24px',
           display: 'flex', flexDirection: 'column', gap: '20px',
+          background: 'rgba(5, 6, 10, 0.95)',
+          boxShadow: '0 -24px 64px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255,255,255,0.08)',
         }}
       >
         <div style={{ width: '40px', height: '4px', background: 'var(--glass-hi)', borderRadius: '2px', margin: '-8px auto 12px' }} />
@@ -267,14 +273,15 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
               {tripMembers.map(m => (
                 <button key={m.id} type="button" onClick={() => toggleMember(m.id)} style={{
                   padding: '6px 14px', borderRadius: '999px', border: '1px solid',
-                  borderColor: selected.has(m.id) ? 'var(--glass-hi)' : 'transparent',
-                  background: selected.has(m.id) ? 'var(--glass)' : 'transparent',
-                  color: selected.has(m.id) ? 'var(--text)' : 'var(--text-dim)',
+                  borderColor: selected.has(m.id) ? 'transparent' : 'var(--glass-brd)',
+                  background: selected.has(m.id) ? 'var(--primary)' : 'transparent',
+                  color: selected.has(m.id) ? '#050a08' : 'var(--text-dim)',
                   fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
                   transition: 'all var(--dur-micro) ease',
-                  boxShadow: selected.has(m.id) ? 'inset 0 1px 0 var(--glass-hi)' : 'none',
+                  display: 'flex', alignItems: 'center', gap: '6px'
                 }}>
-                  {m.name}
+                  {selected.has(m.id) && <span style={{ fontSize: '0.75rem', fontWeight: 800 }}>✓</span>}
+                  {m.id === localId ? 'You' : m.name}
                 </button>
               ))}
             </div>
@@ -286,7 +293,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {selectedArr.map(m => (
               <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ flex: 1, fontSize: '0.9rem', color: 'var(--text)', fontWeight: 500 }}>{m.name}</span>
+                <span style={{ flex: 1, fontSize: '0.9rem', color: 'var(--text)', fontWeight: 500 }}>{m.id === localId ? 'You' : m.name}</span>
                 <input type="number" min="0" step="0.01"
                   value={unequalAmts[m.id] ?? ''}
                   onChange={e => setUnequalAmts(prev => ({ ...prev, [m.id]: e.target.value }))}
@@ -308,7 +315,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {selectedArr.map(m => (
               <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ flex: 1, fontSize: '0.9rem', color: 'var(--text)', fontWeight: 500 }}>{m.name}</span>
+                <span style={{ flex: 1, fontSize: '0.9rem', color: 'var(--text)', fontWeight: 500 }}>{m.id === localId ? 'You' : m.name}</span>
                 <div className="money" style={{ fontSize: '0.85rem', color: 'var(--text-dim)', width: '80px', textAlign: 'right' }}>
                   {totalAmt > 0 ? INR(shareAmounts[m.id] ?? 0) : ''}
                 </div>

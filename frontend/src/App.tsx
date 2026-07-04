@@ -74,16 +74,15 @@ interface EditPayload {
 }
 
 const TripRoom = ({
-  trip, profile, isConnected, onBack, onOverlayChange, selectedMemberId, onSelectMember
+  trip, profile, onBack, onOverlayChange, selectedMemberId, onSelectMember
 }: {
-  trip: Trip; profile: GoogleProfile; isConnected: boolean; onBack: () => void;
+  trip: Trip; profile: GoogleProfile; onBack: () => void;
   onOverlayChange: (v: boolean) => void; selectedMemberId: string | null; onSelectMember: (id: string | null) => void;
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [editPayload, setEditPayload] = useState<EditPayload | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [showDeleteTrip, setShowDeleteTrip] = useState(false);
-  const [deleteTripName, setDeleteTripName] = useState('');
   const [deleteExpenseLoading, setDeleteExpenseLoading] = useState<string | null>(null);
 
   const expenses = useExpense();
@@ -140,6 +139,21 @@ const TripRoom = ({
     onOverlayChange(showModal || showDeleteTrip || selectedMemberId !== null);
   }, [showModal, showDeleteTrip, selectedMemberId, onOverlayChange]);
 
+  // Handle Escape / Backspace for back navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Backspace') {
+        const target = e.target as HTMLElement;
+        const tag = target.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea') return;
+        if (showModal || showDeleteTrip) return;
+        onBack();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onBack, showModal, showDeleteTrip]);
+
   const handleDeleteExpense = async (expId: string, desc: string) => {
     if (deleteConfirm !== expId) {
       setDeleteConfirm(expId);
@@ -161,7 +175,6 @@ const TripRoom = ({
   };
 
   const handleDeleteTrip = async () => {
-    if (deleteTripName !== trip.name) return;
     const c = StDB.conn as any;
     try {
       await c.reducers.deleteTrip({ tripId: trip.id });
@@ -177,8 +190,17 @@ const TripRoom = ({
     const groups: { label: string; items: typeof tripExpenses }[] = [];
     const dayOf = (ts: any) => {
       try {
-        const ms = typeof ts === 'object' && ts && 'microsSinceEpoch' in ts
-          ? Number(ts.microsSinceEpoch) / 1000 : Number(ts);
+        let ms = 0;
+        if (typeof ts === 'object' && ts && 'microsSinceEpoch' in ts) {
+          ms = Number(ts.microsSinceEpoch) / 1000;
+        } else if (typeof ts === 'bigint') {
+          ms = Number(ts) / 1000;
+        } else if (typeof ts === 'number') {
+          ms = ts > 2000000000000 ? ts / 1000 : ts;
+        } else {
+          ms = Date.parse(ts);
+        }
+        if (isNaN(ms) || ms === 0) return 'Unknown';
         return new Date(ms).toDateString();
       } catch { return 'Unknown'; }
     };
@@ -257,52 +279,69 @@ const TripRoom = ({
     >
       {/* Top bar */}
       <div style={{
-        pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: '12px',
+        pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: '16px',
         padding: '16px 24px',
         background: 'linear-gradient(to bottom, rgba(2,5,8,0.92) 0%, rgba(2,5,8,0) 100%)',
       }}>
-        <button onClick={onBack} style={{ ...BTN_GHOST, background: 'rgba(255,255,255,0.08)', color: '#e0e8e5' }}>
-          ← Cosmos
+        {/* Wordmark Lockup */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0px' }}>
+          <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1 }}>SIMPLI</span>
+          <span style={{ fontSize: '0.62rem', fontWeight: 500, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif' }}>Built on SpacetimeDB</span>
+        </div>
+
+        {/* Galaxy Chip (Back to Cosmos) */}
+        <button onClick={onBack} className="glass-panel" style={{ 
+           display: 'flex', alignItems: 'center', gap: '8px', 
+           padding: '6px 14px', border: '1px solid var(--glass-brd)',
+           color: 'var(--text)', cursor: 'pointer', marginLeft: '8px', borderRadius: '999px',
+           fontSize: '0.85rem', fontWeight: 600, transition: 'background 0.2s'
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+        onMouseLeave={(e) => e.currentTarget.style.background = 'var(--glass)'}
+        >
+          <span style={{ color: 'var(--text-dim)' }}>←</span> ◍ {trip.name}
         </button>
-        <div style={{ flex: 1, paddingLeft: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#555' }}>Galaxy</span>
-            <span style={{ fontWeight: 800, fontSize: '1.15rem', color: '#f8f9fa', letterSpacing: '-0.02em' }}>{trip.name}</span>
-          </div>
-        </div>
 
-        <div style={{ width: '200px', flexShrink: 0 }}>
-          <KarmaBar tripId={trip.id} />
-        </div>
+        <div style={{ flex: 1 }} />
 
-        {/* Galaxy settings */}
+        {/* Galaxy settings (Trash) */}
         <button
           onClick={() => setShowDeleteTrip(true)}
-          style={{ ...BTN_GHOST, padding: '8px 12px', color: '#555', fontSize: '1rem' }}
-          title="Galaxy settings"
-        >⋯</button>
+          style={{ ...BTN_GHOST, padding: '8px', color: 'var(--text-dim)', transition: 'color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--owe)'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
+          title="Delete galaxy"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
 
-        <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: isConnected ? '#6fba8a' : '#555', boxShadow: isConnected ? '0 0 8px #6fba8a' : 'none' }} />
-        <img src={profile.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)' }} />
+        <img src={profile.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', marginLeft: '8px' }} />
       </div>
 
-      {/* Bottom Dock */}
+      {/* Bottom Actions */}
       <div style={{
         position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'all',
-        display: 'flex', alignItems: 'center', gap: '8px',
-        background: 'rgba(16,20,18,0.65)', backdropFilter: 'blur(32px)', WebkitBackdropFilter: 'blur(32px)',
-        border: '1px solid rgba(255,255,255,0.08)', borderRadius: '32px', padding: '6px',
-        boxShadow: '0 16px 40px rgba(0,0,0,0.6)', zIndex: 20
+        display: 'flex', alignItems: 'center', gap: '16px', zIndex: 20
       }}>
-        <button onClick={copyInvite} style={{ ...BTN_GHOST, background: 'transparent', border: 'none', color: '#9bafa4', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '6px' }} title="Invite">
+        <button onClick={copyInvite} className="glass-panel" style={{ 
+          border: '1px solid var(--glass-brd)', color: 'var(--text)', padding: '0 20px', 
+          display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '14px', height: '44px',
+          fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+          transition: 'background 0.2s'
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+        onMouseLeave={(e) => e.currentTarget.style.background = 'var(--glass)'}
+        title="Invite">
            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
            {copied ? 'Copied' : 'Invite'}
         </button>
-        <button
-          onClick={() => { setEditPayload(null); setShowModal(true); }}
-          style={{ ...BTN_GHOST, background: '#9bafa4', color: '#050a08', border: 'none', borderRadius: '24px', padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '6px' }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+
+        <button onClick={() => { setEditPayload(null); setShowModal(true); }} className="btn-primary" style={{ 
+          color: '#050a08', padding: '0 20px', 
+          display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '14px', height: '44px',
+          fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 12px 32px rgba(255, 183, 77, 0.2)'
+        }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           Add expense
         </button>
       </div>
@@ -313,6 +352,11 @@ const TripRoom = ({
         width: '340px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
         background: 'rgba(5, 6, 10, 0.65)'
       }}>
+        {/* Karma Bar directly inside Right Panel */}
+        <div style={{ padding: '20px 20px 8px', borderBottom: '1px solid var(--glass-brd)' }}>
+          <KarmaBar tripId={trip.id} />
+        </div>
+
         <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--glass-brd)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
             <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
@@ -340,7 +384,9 @@ const TripRoom = ({
                   const splitSummary = expSplits.length === 0
                     ? 'Personal'
                     : isSettlement ? 'Settlement'
-                    : `${isMe ? 'You' : payerName} paid · split ${expSplits.length} ways`;
+                    : (expSplits.length === 1 && norm(expSplits[0].debtorId) === norm(exp.payerId))
+                      ? 'Personal'
+                      : `${isMe ? 'You' : payerName} paid · split ${expSplits.length} way${expSplits.length === 1 ? '' : 's'}`;
                   const isConfirming = deleteConfirm === exp.id;
 
                   return (
@@ -349,6 +395,7 @@ const TripRoom = ({
                       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -20 }}
                       transition={{ delay: i * 0.03, duration: 0.25, ease: EO }}
+                      className="expense-row"
                       style={{
                         padding: '11px 13px', marginBottom: '6px', position: 'relative',
                         borderBottom: '1px solid var(--glass-brd)'
@@ -370,32 +417,38 @@ const TripRoom = ({
                           <span className="money" style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text)' }}>
                             {INR(exp.amount)}
                           </span>
-                          {/* Action buttons */}
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            {!isSettlement && (
-                              <button
-                                onClick={() => { setEditPayload({ expense: exp, splits: expSplits }); setShowModal(true); }}
-                                style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '6px', padding: '3px 8px', color: '#555', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit', transition: 'color 120ms' }}
-                                title="Edit"
-                              >Edit</button>
-                            )}
-                            <button
-                              onClick={() => handleDeleteExpense(exp.id, exp.description)}
-                              disabled={deleteExpenseLoading === exp.id}
-                              style={{
-                                background: isConfirming ? 'rgba(217,138,108,0.15)' : 'none',
-                                border: `1px solid ${isConfirming ? '#d98a6c' : 'rgba(255,255,255,0.08)'}`,
-                                borderRadius: '6px', padding: '3px 8px',
-                                color: isConfirming ? '#d98a6c' : '#555',
-                                cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit',
-                                transition: 'all 120ms',
-                              }}
-                              title={isSettlement ? 'Undo settlement' : 'Delete expense'}
-                            >
-                              {isConfirming ? 'Confirm?' : isSettlement ? 'Undo' : 'Delete'}
-                            </button>
-                          </div>
                         </div>
+                      </div>
+                      
+                      {/* Action buttons (icon row below on hover) */}
+                      <div className="expense-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+                        {!isSettlement && (
+                          <button
+                            onClick={() => { setEditPayload({ expense: exp, splits: expSplits }); setShowModal(true); }}
+                            className="btn-ghost"
+                            style={{ padding: '6px', color: 'var(--text-dim)', transition: 'color 0.2s', display: 'flex', alignItems: 'center' }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = 'var(--text)'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
+                            title="Edit"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteExpense(exp.id, exp.description)}
+                          disabled={deleteExpenseLoading === exp.id}
+                          className="btn-ghost"
+                          style={{
+                            padding: '6px', color: isConfirming ? 'var(--owe)' : 'var(--text-dim)', 
+                            transition: 'color 0.2s', display: 'flex', alignItems: 'center'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--owe)'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = isConfirming ? 'var(--owe)' : 'var(--text-dim)'}
+                          title={isSettlement ? 'Undo settlement' : 'Delete expense'}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                          {isConfirming && <span style={{ marginLeft: '4px', fontSize: '0.7rem' }}>Confirm?</span>}
+                        </button>
                       </div>
                     </motion.div>
                   );
@@ -508,36 +561,19 @@ const TripRoom = ({
               onClick={e => e.stopPropagation()}
             >
               <div>
-                <h2 className="font-clash" style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--owe)' }}>Delete galaxy</h2>
+                <h2 className="font-clash" style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--owe)' }}>Delete galaxy?</h2>
                 <p style={{ margin: '8px 0 0', fontSize: '0.85rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
                   This deletes <strong style={{ color: 'var(--text)' }}>{trip.name}</strong>, its members, and every expense for everyone in it. This cannot be undone.
                 </p>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 600 }}>
-                  Type <strong>{trip.name}</strong> to confirm
-                </label>
-                <input
-                  value={deleteTripName}
-                  onChange={e => setDeleteTripName(e.target.value)}
-                  placeholder={trip.name}
-                  style={{
-                    width: '100%', boxSizing: 'border-box', background: 'var(--glass)',
-                    border: '1px solid var(--glass-brd)', borderRadius: '14px', padding: '12px 16px',
-                    color: 'white', fontSize: '1rem', outline: 'none', fontFamily: 'inherit',
-                    transition: 'border-color var(--dur-micro) ease',
-                  }}
-                />
-              </div>
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button onClick={() => setShowDeleteTrip(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+                <button onClick={() => setShowDeleteTrip(false)} className="btn-secondary" style={{ flex: 1 }}>No, cancel</button>
                 <button
                   onClick={handleDeleteTrip}
-                  disabled={deleteTripName !== trip.name}
                   className="btn-destructive"
-                  style={{ flex: 1, opacity: deleteTripName === trip.name ? 1 : 0.4 }}
+                  style={{ flex: 1 }}
                 >
-                  Delete galaxy
+                  Yes, delete
                 </button>
               </div>
             </motion.div>
@@ -590,22 +626,15 @@ const Dashboard = ({
         pointerEvents: 'none',
       }}
     >
-      {/* Top bar */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, pointerEvents: 'all',
-        display: 'flex', alignItems: 'center', gap: '12px', padding: '20px 28px',
+        display: 'flex', alignItems: 'center', gap: '24px', padding: '20px 28px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-          <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)' }}>SIMPLI</span>
-          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            {profile.name.split(' ')[0]}'s cosmos
-          </span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0px' }}>
+          <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1 }}>SIMPLI</span>
+          <span style={{ fontSize: '0.62rem', fontWeight: 500, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif' }}>Built on SpacetimeDB</span>
         </div>
         <div style={{ flex: 1 }} />
-        <div className="glass-pill" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 11px' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: isConnected ? 'var(--owed)' : '#555', boxShadow: isConnected ? '0 0 8px var(--owed)' : 'none' }} />
-          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: isConnected ? 'var(--owed)' : 'var(--text-dim)' }}>{isConnected ? 'Live' : 'Offline'}</span>
-        </div>
         <img src={profile.picture} alt="" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)' }} />
         <button onClick={onLogout} className="btn-secondary" style={{ height: '34px', borderRadius: '999px', fontSize: '0.82rem' }}>Logout</button>
       </div>
@@ -860,7 +889,6 @@ function App() {
                   key={`room-${selectedTrip.id}`}
                   trip={selectedTrip}
                   profile={profile}
-                  isConnected={isConnected}
                   onBack={() => { selectTrip(null); setSelectedMemberId(null); setOverlayOpen(false); }}
                   onOverlayChange={setOverlayOpen}
                   selectedMemberId={selectedMemberId}
