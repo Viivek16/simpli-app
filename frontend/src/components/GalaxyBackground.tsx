@@ -20,6 +20,27 @@ import * as THREE from 'three';
 import { LiveDebtConstellation } from './LiveDebtConstellation';
 import { ErrorBoundary } from './ErrorBoundary';
 import type { Trip } from '../hooks/useTrips';
+import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
+import * as StDB from '../spacetimedb';
+
+const norm = (s: any) => String(s ?? '').toLowerCase().trim();
+
+// Glow texture helper
+const createGlowTexture = () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 128;
+  const ctx = canvas.getContext('2d')!;
+  const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+  gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.6)');
+  gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)');
+  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 128, 128);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+};
 
 // Stable color palette hashed from trip id (Phase 2.1)
 const PALETTE = [
@@ -40,100 +61,128 @@ const tripColor = (id: string) => PALETTE[hashId(id) % PALETTE.length];
 
 // ─── Macro galaxy particle cloud ──────────────────────────────────────────────
 const PARTICLE_COUNT = 7500;
+let sharedGlowTex: THREE.CanvasTexture | null = null;
 
 const SwirlingGalaxy = ({
-  position, colorCoreStr, colorEdgeStr, onClick, name, hovered, selected, hidden, index
+  position, colorCoreStr, colorEdgeStr, onClick, name, hovered, selected, hidden, index, settled, netBalances
 }: {
   position: THREE.Vector3; colorCoreStr: string; colorEdgeStr: string;
   onClick?: () => void; name?: string; hovered?: boolean; selected?: boolean; hidden?: boolean; index: number;
+  settled: boolean; netBalances: { owes: string; owed: string; amtOwes: number; amtOwed: number } | null;
 }) => {
-  const ref = useRef<THREE.Points>(null);
+  const ref = useRef<THREE.Group>(null);
+  const pointsRef = useRef<THREE.Points>(null);
+  const spriteRef1 = useRef<THREE.Sprite>(null);
+  const spriteRef2 = useRef<THREE.Sprite>(null);
   const mountTime = useRef<number | null>(null);
 
-  const { positions, colors } = useMemo(() => {
+  if (!sharedGlowTex) sharedGlowTex = createGlowTexture();
+
+  const { positions, colors, coreColor, edgeColor } = useMemo(() => {
     const p = new Float32Array(PARTICLE_COUNT * 3);
     const c = new Float32Array(PARTICLE_COUNT * 3);
-    const colorCore = new THREE.Color(colorCoreStr);
-    const colorEdge = new THREE.Color(colorEdgeStr);
+    const cCore = new THREE.Color(colorCoreStr);
+    const cEdge = new THREE.Color(colorEdgeStr);
+    if (settled) {
+      cCore.lerp(new THREE.Color('#888888'), 0.85);
+      cEdge.lerp(new THREE.Color('#555555'), 0.85);
+    }
     const white = new THREE.Color('#FFFFFF');
     const temp = new THREE.Color();
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const radius = Math.random() * 15 + 0.5;
-      const spinAngle = radius * 0.9;
-      const branchAngle = ((i % 3) * Math.PI * 2) / 3;
-      const rx = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 1.5;
-      const ry = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 0.8;
-      const rz = Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1) * 1.5;
-      p[i * 3]     = Math.cos(branchAngle + spinAngle) * radius + rx;
-      p[i * 3 + 1] = ry;
-      p[i * 3 + 2] = Math.sin(branchAngle + spinAngle) * radius + rz;
+      const arm = i % 3;
+      const branchAngle = (arm * Math.PI * 2) / 3;
+      const t = Math.pow(Math.random(), 1.4) * Math.PI * 3.5; 
+      const radius = 0.6 * Math.exp(0.18 * t);
+      const angle = branchAngle + t;
+
+      const scatter = Math.random() * (radius * 0.35) + 0.1;
+      const sx = (Math.random() - 0.5) * scatter;
+      const sy = (Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1)) * (0.8 + radius * 0.1);
+      const sz = (Math.random() - 0.5) * scatter;
+
+      p[i * 3]     = Math.cos(angle) * radius + sx;
+      p[i * 3 + 1] = sy;
+      p[i * 3 + 2] = Math.sin(angle) * radius + sz;
       
-      const intensity = Math.max(0, 1 - radius / 16);
-      temp.lerpColors(colorEdge, colorCore, Math.pow(intensity, 1.2));
-      // White hot core
+      const intensity = Math.max(0, 1 - Math.pow(radius / 16, 1.2));
+      temp.lerpColors(cEdge, cCore, intensity);
       if (radius < 2.5) temp.lerp(white, 1 - radius / 2.5);
       
       c[i * 3] = temp.r; c[i * 3 + 1] = temp.g; c[i * 3 + 2] = temp.b;
     }
-    return { positions: p, colors: c };
-  }, [colorCoreStr, colorEdgeStr]);
+    return { positions: p, colors: c, coreColor: cCore, edgeColor: cEdge };
+  }, [colorCoreStr, colorEdgeStr, settled]);
 
   // Slow self-rotation + streak effect + stagger intro
   useFrame(({ clock }) => {
-    if (!ref.current) return;
-    const mat = ref.current.material as THREE.PointsMaterial;
+    if (!ref.current || !pointsRef.current) return;
+    const mat = pointsRef.current.material as THREE.PointsMaterial;
     
-    // Stagger fade logic (only on first mount)
     if (mountTime.current === null) {
-      // 1-frame delay trick
       mountTime.current = clock.getElapsedTime() + 0.016; 
       mat.opacity = 0;
+      if (spriteRef1.current) spriteRef1.current.material.opacity = 0;
+      if (spriteRef2.current) spriteRef2.current.material.opacity = 0;
       ref.current.scale.set(0.96, 0.96, 0.96);
       return;
     }
 
     const elapsed = clock.getElapsedTime() - mountTime.current;
-    const delay = index * 0.090; // ~90ms stagger
+    const delay = index * 0.090; // 90ms stagger
     
     let e = 1;
-    if (elapsed < delay) {
-      e = 0;
-    } else if (elapsed - delay < 0.520) {
+    if (elapsed < delay) e = 0;
+    else if (elapsed - delay < 0.520) {
       const t = (elapsed - delay) / 0.520;
       e = 1 - Math.pow(1 - t, 4); // cubic-bezier(0.22, 1, 0.36, 1) approx
     }
     
-    ref.current.rotation.y += hovered || selected ? 0.003 : 0.0005;
-    const targetScale = selected ? 1.4 : (hovered ? 1.06 : 1.0);
+    ref.current.rotation.y += hovered || selected ? 0.002 : 0.0004;
+    // settled groups are smaller
+    const targetScale = selected ? 1.4 : (hovered ? 1.06 : (settled ? 0.8 : 1.0));
+    const targetOpacity = hidden ? 0 : (selected ? 0.0 : (settled ? 0.45 : 0.85));
     
-    // Lerp scale and opacity if fully loaded, otherwise use 'e'
     if (e < 1) {
-      const s = 0.96 + e * 0.04 * targetScale;
+      const s = 0.96 + e * (targetScale - 0.96);
       ref.current.scale.set(s, s, s);
-      mat.opacity = e * (hidden ? 0 : (selected ? 0.0 : 0.85));
+      mat.opacity = e * targetOpacity;
+      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * 0.8;
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.4;
     } else {
       ref.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.04);
-      const targetOpacity = hidden ? 0 : (selected ? 0.0 : 0.85);
       mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
+      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * 0.8;
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.4;
     }
   });
 
   return (
     <group position={position}>
-      <Points
-        ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}
-        onClick={(e) => { if (onClick) { e.stopPropagation(); onClick(); } }}
-        onPointerOver={() => { document.body.style.cursor = 'pointer'; }}
-        onPointerOut={() => { document.body.style.cursor = 'auto'; }}
-      >
-        <PointMaterial
-          transparent vertexColors
-          size={0.18}
-          sizeAttenuation depthWrite={false}
-          opacity={0.85}
-          blending={THREE.AdditiveBlending} toneMapped={false}
-        />
-      </Points>
+      <group ref={ref} rotation={[0.1, 0, -0.1]}>
+        <Points
+          ref={pointsRef} positions={positions} colors={colors} stride={3} frustumCulled={false}
+          onClick={(e) => { if (onClick) { e.stopPropagation(); onClick(); } }}
+          onPointerOver={() => { document.body.style.cursor = 'pointer'; }}
+          onPointerOut={() => { document.body.style.cursor = 'auto'; }}
+        >
+          <PointMaterial
+            transparent vertexColors
+            size={0.22}
+            sizeAttenuation depthWrite={false}
+            opacity={0}
+            blending={THREE.AdditiveBlending} toneMapped={false}
+          />
+        </Points>
+        {/* Core Glow */}
+        <sprite ref={spriteRef1} scale={[18, 18, 1]} position={[0, 0, 0]}>
+          <spriteMaterial map={sharedGlowTex} color={coreColor} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
+        </sprite>
+        {/* Nebula Haze */}
+        <sprite ref={spriteRef2} scale={[45, 45, 1]} position={[0, -0.5, 0]}>
+          <spriteMaterial map={sharedGlowTex} color={edgeColor} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
+        </sprite>
+      </group>
       {name && !selected && (
         <Html center distanceFactor={22} style={{ pointerEvents: 'none', userSelect: 'none' }}>
           <div className="font-clash" style={{
@@ -148,6 +197,30 @@ const SwirlingGalaxy = ({
             opacity: hidden ? 0 : 1,
             whiteSpace: 'nowrap', marginTop: '-60px'
           }}>{name}</div>
+          
+          {/* A4: Hover Tooltips */}
+          {hovered && !hidden && (
+            <div style={{
+              marginTop: '8px', background: 'rgba(5,6,10,0.85)', backdropFilter: 'blur(12px)',
+              border: '1px solid var(--glass-brd)', borderRadius: '12px', padding: '10px 14px',
+              color: 'var(--text)', fontSize: '0.8rem', whiteSpace: 'nowrap',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+              animation: 'bloomFadeIn 160ms cubic-bezier(0.22,1,0.36,1) forwards'
+            }}>
+              {settled ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)' }}>
+                  <span style={{ color: 'var(--owed)' }}>✓</span> Settled up
+                </div>
+              ) : netBalances ? (
+                <>
+                  {netBalances.amtOwed > 0 && <div style={{ color: 'var(--owed)' }}><span style={{ color: 'var(--text-dim)' }}>{netBalances.owed} owes</span> +₹{Math.round(netBalances.amtOwed)}</div>}
+                  {netBalances.amtOwes > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>You owe {netBalances.owes}</span> -₹{Math.round(netBalances.amtOwes)}</div>}
+                  {netBalances.amtOwed === 0 && netBalances.amtOwes === 0 && <div style={{ color: 'var(--text-dim)' }}>You are settled up</div>}
+                </>
+              ) : null}
+            </div>
+          )}
         </Html>
       )}
     </group>
@@ -159,17 +232,19 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
   const ref = useRef<THREE.Points>(null);
   
   const { positions, colors } = useMemo(() => {
-    const p = new Float32Array(2500 * 3);
-    const c = new Float32Array(2500 * 3);
-    for (let i = 0; i < 2500; i++) {
-      const r = 160 + Math.random() * 40;
+    const TOTAL = 3500;
+    const p = new Float32Array(TOTAL * 3);
+    const c = new Float32Array(TOTAL * 3);
+    for (let i = 0; i < TOTAL; i++) {
+      const layer = i % 3;
+      const r = 180 + layer * 80 + Math.random() * 40;
       const theta = 2 * Math.PI * Math.random();
       const phi = Math.acos(2 * Math.random() - 1);
       p[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       p[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       p[i * 3 + 2] = r * Math.cos(phi);
       
-      const v = 0.4 + Math.random() * 0.4;
+      const v = 0.3 + Math.random() * 0.4 + (layer === 0 ? 0.2 : 0);
       c[i * 3] = v; c[i * 3 + 1] = v; 
       c[i * 3 + 2] = v + (Math.random() < 0.2 ? 0.2 : 0);
     }
@@ -241,11 +316,13 @@ interface GalaxyCameraControllerProps {
 const GalaxyScene = ({
   activeTripId, trips, onSelectTrip, uiPaused,
   hoveredStar, onStarHover, onStarClick,
+  tripBalances
 }: GalaxyCameraControllerProps & {
   uiPaused: boolean;
   hoveredStar: string | null;
   onStarHover: (id: string | null) => void;
   onStarClick: (id: string | null) => void;
+  tripBalances: Record<string, { settled: boolean, netBalances: { owes: string, owed: string, amtOwes: number, amtOwed: number } | null }>;
 }) => {
   const hoveredGalaxy = null as HoveredGalaxy | null; // phase 2: hover state
   const [settling, setSettling] = useState(false);
@@ -316,20 +393,25 @@ const GalaxyScene = ({
         )}
         
         {/* ── Macro View: galaxy ring fades out when activeTripId is set ── */}
-        {!(activeTripId && settled) && tripPositions.map(({ trip, pos, cols }, idx) => (
-          <SwirlingGalaxy
-            key={trip.id}
-            index={idx}
-            position={pos}
-            colorCoreStr={cols.core}
-            colorEdgeStr={cols.edge}
-            name={trip.name}
-            hovered={hoveredGalaxy?.id === trip.id}
-            selected={activeTripId === trip.id}
-            hidden={activeTripId !== null}
-            onClick={() => onSelectTrip(trip)}
-          />
-        ))}
+        {!(activeTripId && settled) && tripPositions.map(({ trip, pos, cols }, idx) => {
+          const bal = tripBalances[trip.id] || { settled: false, netBalances: null };
+          return (
+            <SwirlingGalaxy
+              key={trip.id}
+              index={idx}
+              position={pos}
+              colorCoreStr={cols.core}
+              colorEdgeStr={cols.edge}
+              name={trip.name}
+              hovered={hoveredGalaxy?.id === trip.id}
+              selected={activeTripId === trip.id}
+              hidden={activeTripId !== null}
+              onClick={() => onSelectTrip(trip)}
+              settled={bal.settled}
+              netBalances={bal.netBalances}
+            />
+          );
+        })}
       </ErrorBoundary>
 
       <EffectComposer>
@@ -363,6 +445,64 @@ interface GBProps {
 }
 
 export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick }: GBProps) => {
+  const expenses = useExpense();
+  const splits = useExpenseSplit();
+  const allUsers = useUser();
+  const localId = norm(StDB.localIdentity ?? '');
+
+  // Calculate net balances per trip
+  const tripBalances = useMemo(() => {
+    const m = new Map<string, string>();
+    allUsers.forEach(u => {
+      const id = (typeof u.id === 'object' && u.id && 'toHexString' in u.id)
+        ? norm(u.id.toHexString()) : norm(u.id);
+      if (!m.has(id)) m.set(id, u.name || 'Member');
+    });
+
+    const res: Record<string, { settled: boolean, netBalances: { owes: string, owed: string, amtOwes: number, amtOwed: number } | null }> = {};
+    trips.forEach(trip => {
+      const tripExp = expenses.filter(e => e.tripId === trip.id);
+      const netPair: Record<string, Record<string, number>> = {};
+      const netUser: Record<string, number> = {};
+
+      tripExp.forEach(exp => {
+        const payer = norm(exp.payerId);
+        splits.filter(s => s.expenseId === exp.id).forEach(s => {
+          const debtor = norm(s.debtorId);
+          netUser[payer] = (netUser[payer] || 0) + s.amountOwed;
+          netUser[debtor] = (netUser[debtor] || 0) - s.amountOwed;
+
+          if (payer !== debtor) {
+            if (!netPair[debtor]) netPair[debtor] = {};
+            netPair[debtor][payer] = (netPair[debtor][payer] || 0) + s.amountOwed;
+            
+            if (!netPair[payer]) netPair[payer] = {};
+            netPair[payer][debtor] = (netPair[payer][debtor] || 0) - s.amountOwed;
+          }
+        });
+      });
+
+      let settled = true;
+      for (const val of Object.values(netUser)) {
+        if (Math.abs(val) > 0.5) settled = false;
+      }
+
+      if (settled) {
+        res[trip.id] = { settled: true, netBalances: null };
+      } else {
+        // Find biggest pairwise balance for local user
+        let amtOwed = 0; let owedBy = '';
+        let amtOwes = 0; let owesTo = '';
+        const myPairs = netPair[localId] || {};
+        for (const [otherId, amt] of Object.entries(myPairs)) {
+          if (amt < -0.5 && Math.abs(amt) > amtOwed) { amtOwed = Math.abs(amt); owedBy = m.get(otherId) || 'Member'; }
+          if (amt > 0.5 && amt > amtOwes) { amtOwes = amt; owesTo = m.get(otherId) || 'Member'; }
+        }
+        res[trip.id] = { settled: false, netBalances: (amtOwed > 0 || amtOwes > 0) ? { owes: owesTo, owed: owedBy, amtOwes, amtOwed } : null };
+      }
+    });
+    return res;
+  }, [trips, expenses, splits, allUsers, localId]);
 
   return (
     <div style={{
@@ -384,6 +524,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
             hoveredStar={hoveredStar}
             onStarHover={onStarHover}
             onStarClick={onStarClick}
+            tripBalances={tripBalances}
           />
         </Canvas>
       </ErrorBoundary>

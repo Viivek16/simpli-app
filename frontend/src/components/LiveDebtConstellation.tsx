@@ -7,12 +7,14 @@
  * - Debt lines use drei <Line> with dashed prop (Phase 2.2)
  * - Star halo = cheap additive-blending sprite, not a large transparent sphere
  */
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { Html, Line } from '@react-three/drei';
-import { motion } from 'framer-motion';
+import { useFrame } from '@react-three/fiber';
+import { motion, AnimatePresence } from 'framer-motion';
 import * as THREE from 'three';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import { useTripMember } from '../hooks/useTrips';
+import { toast } from './Toast';
 import * as StDB from '../spacetimedb';
 
 const INR = (v: number) =>
@@ -33,10 +35,11 @@ interface LDCProps {
   hoveredStar: string | null;
   onStarHover: (id: string | null) => void;
   onStarClick: (id: string | null) => void;
+  selectedMemberId?: string | null;
   settling?: boolean;
 }
 
-export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar, onStarHover, onStarClick, settling: _settling }: LDCProps) => {
+export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar, onStarHover, onStarClick, selectedMemberId, settling: _settling }: LDCProps) => {
   const allUsers = useUser();
   const tripMemberIds = useTripMember(activeTripId);
   const splits = useExpenseSplit();
@@ -154,10 +157,51 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
     return texture;
   }, []);
 
+  // B1: Smooth Fly-in & Living Constellation (drift/bob)
+  useFrame(({ clock }) => {
+    if (!ref.current || _settling) return;
+    const t = clock.getElapsedTime();
+    // Global drift
+    ref.current.rotation.y = Math.sin(t * 0.15) * 0.04;
+    ref.current.rotation.x = Math.sin(t * 0.2) * 0.02;
+    // Local star bob
+    ref.current.children.forEach((child, i) => {
+      if (child.name === 'star-group') {
+        const offset = Math.sin(t * 1.2 + i * 2.1) * 0.12;
+        child.position.y = nodes[i].position.y + offset;
+      }
+    });
+  });
+
+  // Helper for settling debt in popup
+  const handleSettle = async (otherId: string, amount: number) => {
+    const payerId = amount > 0 ? otherId : localId;
+    const payeeId = amount > 0 ? localId : otherId;
+    const settleAmt = Math.abs(amount);
+
+    const c = StDB.conn as any;
+    if (!c) return;
+    try {
+      await c.reducers.settleDebt({ tripId: activeTripId, debtorId: payerId, payeeId, amount: settleAmt });
+      toast.success('Settled up!');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to settle debt');
+    }
+  };
+
+  // Close popup on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedMemberId) onStarClick(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedMemberId, onStarClick]);
+
   return (
-    <group ref={ref}>
+    <group ref={ref} onClick={(e) => { if (e.object.type !== 'Mesh' && selectedMemberId) onStarClick(null); }}>
       {/* Stars */}
-      {nodes.map(node => {
+      {nodes.map((node) => {
         const isLocal = node.id === localId;
         const settled = Math.abs(node.netDebt) < 0.5;
         const ratio = Math.min(Math.abs(node.netDebt) / maxNetDebt, 1);
@@ -168,9 +212,13 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
         const coreColor = settled ? '#9aa0aa' : color;
 
         const labelColor = settled ? '#6b7280' : node.netDebt < 0 ? '#d98a6c' : '#6fba8a';
+        const isSelected = selectedMemberId === node.id;
+        const myPairDebt = owes[localId]?.[node.id] || 0;
+        const theirPairDebt = owes[node.id]?.[localId] || 0;
+        const pairNet = theirPairDebt - myPairDebt; // > 0 means they owe me
 
         return (
-          <group key={node.id} position={node.position}>
+          <group key={node.id} position={node.position} name="star-group">
             {/* Core star sphere */}
             <mesh
               onClick={() => onStarClick(node.id)}
@@ -226,29 +274,89 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
             )}
 
             {/* Label */}
-            <Html center distanceFactor={14} style={{ pointerEvents: 'none', userSelect: 'none' }}>
-              <div className="glass-pill" style={{
-                textAlign: 'center', whiteSpace: 'nowrap', padding: '6px 14px', marginTop: '64px',
-                background: 'rgba(5,6,10,0.6)', border: '1px solid var(--glass-brd)'
-              }}>
-                <motion.div
-                  animate={isSolo ? { scale: [1, 1.05, 1] } : { scale: 1 }}
-                  transition={isSolo ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } : {}}
-                >
-                  <div style={{
-                    color: 'var(--text)', fontSize: '0.85rem', fontWeight: 600,
-                    fontFamily: 'Satoshi, sans-serif'
-                  }}>
-                    {isLocal ? 'You' : node.name}
-                  </div>
-                  <div className="money" style={{
-                    color: labelColor, fontSize: '0.75rem', fontWeight: 700, marginTop: '2px',
-                  }}>
-                    {settled ? 'Settled' : (node.netDebt > 0 ? '+' : '') + INR(node.netDebt)}
-                  </div>
-                </motion.div>
-              </div>
-            </Html>
+            {!isSelected && (
+              <Html center distanceFactor={14} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                <div className="glass-pill" style={{
+                  textAlign: 'center', whiteSpace: 'nowrap', padding: '6px 14px', marginTop: '64px',
+                  background: 'rgba(5,6,10,0.6)', border: '1px solid var(--glass-brd)'
+                }}>
+                  <motion.div
+                    animate={isSolo ? { scale: [1, 1.05, 1] } : { scale: 1 }}
+                    transition={isSolo ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } : {}}
+                  >
+                    <div style={{
+                      color: 'var(--text)', fontSize: '0.85rem', fontWeight: 600,
+                      fontFamily: 'Satoshi, sans-serif'
+                    }}>
+                      {isLocal ? 'You' : node.name}
+                    </div>
+                    <div className="money" style={{
+                      color: labelColor, fontSize: '0.75rem', fontWeight: 700, marginTop: '2px',
+                    }}>
+                      {settled ? 'Settled' : (node.netDebt > 0 ? '+' : '') + INR(node.netDebt)}
+                    </div>
+                  </motion.div>
+                </div>
+              </Html>
+            )}
+
+            {/* Futuristic Popup */}
+            {isSelected && (
+              <Html center distanceFactor={14} zIndexRange={[100, 0]} style={{ pointerEvents: 'all' }}>
+                <AnimatePresence>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.85, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                    transition={{ type: 'spring', damping: 24, stiffness: 350 }}
+                    style={{
+                      background: 'rgba(10, 12, 16, 0.85)', backdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(255,255,255,0.15)', borderRadius: '20px',
+                      padding: '20px', width: '220px',
+                      boxShadow: '0 16px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
+                      marginTop: '110px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+                    }}
+                  >
+                    <div style={{ width: '100%', textAlign: 'center' }}>
+                      <div style={{ color: 'var(--text)', fontSize: '1.1rem', fontWeight: 700, fontFamily: 'Satoshi, sans-serif' }}>
+                        {isLocal ? 'You' : node.name}
+                      </div>
+                      {!isLocal && (
+                        <div style={{ marginTop: '8px', fontSize: '0.85rem', color: 'var(--text-dim)' }}>
+                          {Math.abs(pairNet) < 0.5 ? 'Settled up with you' : pairNet > 0 ? 'Owes you' : 'You owe'}
+                        </div>
+                      )}
+                      {!isLocal && Math.abs(pairNet) > 0.5 && (
+                        <div className="money" style={{ fontSize: '1.4rem', fontWeight: 700, color: pairNet > 0 ? 'var(--owed)' : 'var(--owe)' }}>
+                          {INR(Math.abs(pairNet))}
+                        </div>
+                      )}
+                      {isLocal && (
+                        <>
+                          <div style={{ marginTop: '8px', fontSize: '0.85rem', color: 'var(--text-dim)' }}>Total Net Balance</div>
+                          <div className="money" style={{ fontSize: '1.4rem', fontWeight: 700, color: labelColor }}>
+                            {node.netDebt > 0 ? '+' : ''}{INR(node.netDebt)}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    
+                    {!isLocal && Math.abs(pairNet) > 0.5 && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleSettle(node.id, pairNet); onStarClick(null); }}
+                        className="btn-primary"
+                        style={{
+                          width: '100%', padding: '10px 0', borderRadius: '12px', fontSize: '0.9rem', fontWeight: 700,
+                          background: 'rgba(255,255,255,0.95)', color: '#000', boxShadow: '0 4px 12px rgba(255,255,255,0.15)'
+                        }}
+                      >
+                        Settle up
+                      </button>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </Html>
+            )}
           </group>
         );
       })}
@@ -281,9 +389,9 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
               key={`${a.id}-${b.id}`}
               points={[a.position, b.position]}
               color="#ffffff"
-              lineWidth={0.7 + ratio * 3.0}
+              lineWidth={0.35 + ratio * 1.6}
               transparent
-              opacity={0.2 + ratio * 0.45}
+              opacity={0.18 + ratio * 0.4}
               toneMapped={false}
             />
           );

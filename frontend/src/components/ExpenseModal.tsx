@@ -204,7 +204,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 300,
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
       pointerEvents: 'all',
     }}>
       <motion.div
@@ -215,19 +215,20 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
       />
       <motion.form
         onSubmit={submit}
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        initial={{ y: 20, opacity: 0, scale: 0.98 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 20, opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
         className="glass-panel"
         style={{
-          position: 'relative', width: '100%', maxWidth: '560px',
-          maxHeight: '70vh', overflowY: 'auto',
-          borderRadius: '26px 26px 0 0', padding: '24px',
+          position: 'relative', width: '100%', maxWidth: '520px',
+          maxHeight: '85vh', overflowY: 'auto',
+          borderRadius: '26px', padding: '24px', margin: '16px',
           display: 'flex', flexDirection: 'column', gap: '20px',
-          background: 'rgba(5, 6, 10, 0.95)',
-          boxShadow: '0 -24px 64px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255,255,255,0.08)',
+          background: 'rgba(10, 12, 16, 0.95)',
+          boxShadow: '0 32px 64px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px rgba(255,255,255,0.05)',
         }}
       >
-        <div style={{ width: '40px', height: '4px', background: 'var(--glass-hi)', borderRadius: '2px', margin: '-8px auto 12px' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 className="font-clash" style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700, color: 'var(--text)' }}>
             {isEdit ? 'Edit expense' : 'Add expense'}
@@ -236,17 +237,22 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
         </div>
 
         {/* Split mode tabs */}
-        <div className="glass-pill" style={{ display: 'flex', padding: '4px', gap: '4px' }}>
+        <div style={{ display: 'flex', gap: '20px', borderBottom: '1px solid var(--glass-brd)', paddingBottom: '8px' }}>
           {modes.map(({ key, label }) => (
             <button key={key} type="button" onClick={() => setMode(key)} style={{
-              flex: 1, padding: '8px 12px', borderRadius: '999px', border: 'none',
-              cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', fontFamily: 'inherit',
-              transition: 'all var(--dur-micro) ease',
-              background: mode === key ? 'var(--glass)' : 'transparent',
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontWeight: 600, fontSize: '0.85rem', fontFamily: 'inherit',
+              padding: '4px 0', position: 'relative',
               color: mode === key ? 'var(--text)' : 'var(--text-dim)',
-              boxShadow: mode === key ? 'inset 0 1px 0 var(--glass-hi)' : 'none',
+              transition: 'color var(--dur-micro) ease',
             }}>
               {label}
+              {mode === key && (
+                <motion.div
+                  layoutId="activeTab"
+                  style={{ position: 'absolute', bottom: -9, left: 0, right: 0, height: 2, background: 'var(--owed)', borderRadius: 2 }}
+                />
+              )}
             </button>
           ))}
         </div>
@@ -272,15 +278,16 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {tripMembers.map(m => (
                 <button key={m.id} type="button" onClick={() => toggleMember(m.id)} style={{
-                  padding: '6px 14px', borderRadius: '999px', border: '1px solid',
-                  borderColor: selected.has(m.id) ? 'transparent' : 'var(--glass-brd)',
-                  background: selected.has(m.id) ? 'var(--primary)' : 'transparent',
-                  color: selected.has(m.id) ? '#050a08' : 'var(--text-dim)',
+                  padding: '6px 14px', borderRadius: '999px',
+                  border: '1px solid',
+                  borderColor: selected.has(m.id) ? 'var(--owed)' : 'var(--glass-brd)',
+                  background: selected.has(m.id) ? 'rgba(111,186,138,0.1)' : 'transparent',
+                  color: selected.has(m.id) ? 'var(--text)' : 'var(--text-dim)',
                   fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
                   transition: 'all var(--dur-micro) ease',
                   display: 'flex', alignItems: 'center', gap: '6px'
                 }}>
-                  {selected.has(m.id) && <span style={{ fontSize: '0.75rem', fontWeight: 800 }}>✓</span>}
+                  {selected.has(m.id) && <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--owed)' }}>✓</span>}
                   {m.id === localId ? 'You' : m.name}
                 </button>
               ))}
@@ -346,9 +353,9 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
         {err && <p style={{ margin: 0, color: 'var(--owe)', fontSize: '0.85rem', fontWeight: 600 }}>⚠ {err}</p>}
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-          <button type="button" onClick={onClose} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
-          <button type="submit" disabled={loading || !canSubmit} className="btn-primary" style={{ flex: 2, opacity: (loading || !canSubmit) ? 0.5 : 1 }}>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+          <button type="button" onClick={onClose} className="btn-secondary" style={{ flex: 1, height: '48px', fontSize: '0.95rem' }}>Cancel</button>
+          <button type="submit" disabled={loading || !canSubmit} className="btn-primary" style={{ flex: 1, height: '48px', fontSize: '0.95rem', opacity: (loading || !canSubmit) ? 0.5 : 1 }}>
             {loading ? <Spinner /> : isEdit ? 'Save Changes' : 'Add Expense'}
           </button>
         </div>

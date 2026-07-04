@@ -12,11 +12,11 @@ import { useExpense, useExpenseSplit, useUser } from './module_bindings/hooks';
 import type { Expense, ExpenseSplit } from './module_bindings/types';
 import { useTrip, type Trip } from './hooks/useTrips';
 import { useTripMember } from './hooks/useTrips';
-import { KarmaBar } from './components/KarmaBar';
 import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground } from './components/GalaxyBackground';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster, toast } from './components/Toast';
+import { AudioService } from './audio';
 
 const EO = [0.23, 1, 0.32, 1] as const;
 const INR = (v: number) =>
@@ -74,10 +74,10 @@ interface EditPayload {
 }
 
 const TripRoom = ({
-  trip, profile, onBack, onOverlayChange, selectedMemberId, onSelectMember
+  trip, onBack, profile, onOverlayChange, selectedMemberId
 }: {
-  trip: Trip; profile: GoogleProfile; onBack: () => void;
-  onOverlayChange: (v: boolean) => void; selectedMemberId: string | null; onSelectMember: (id: string | null) => void;
+  trip: Trip; onBack: () => void; profile: GoogleProfile;
+  onOverlayChange: (v: boolean) => void; selectedMemberId: string | null;
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [editPayload, setEditPayload] = useState<EditPayload | null>(null);
@@ -166,6 +166,7 @@ const TripRoom = ({
     try {
       const isSettlement = desc === 'Debt settlement';
       await c.reducers.deleteExpense({ expenseId: expId });
+      AudioService.playBlip();
       toast.success(isSettlement ? 'Settlement undone' : 'Expense deleted');
     } catch (e: any) {
       toast.error(e?.message ?? 'Delete failed');
@@ -178,6 +179,7 @@ const TripRoom = ({
     const c = StDB.conn as any;
     try {
       await c.reducers.deleteTrip({ tripId: trip.id });
+      AudioService.playBlip();
       toast.success(`"${trip.name}" deleted`);
       onBack();
     } catch (e: any) {
@@ -192,6 +194,7 @@ const TripRoom = ({
       try {
         let ms = 0;
         if (typeof ts === 'object' && ts && 'microsSinceEpoch' in ts) {
+          // Sometimes it comes as a string or BigInt, convert safely
           ms = Number(ts.microsSinceEpoch) / 1000;
         } else if (typeof ts === 'bigint') {
           ms = Number(ts) / 1000;
@@ -209,6 +212,9 @@ const TripRoom = ({
       const yesterday = new Date(Date.now() - 86400000).toDateString();
       if (d === today) return 'Today';
       if (d === yesterday) return 'Yesterday';
+      // "Mon Jul 04 2026" -> "Jul 04"
+      const parts = d.split(' ');
+      if (parts.length >= 3) return `${parts[1]} ${parts[2]}`;
       return d;
     };
     const dayMap = new Map<string, typeof tripExpenses>();
@@ -253,22 +259,12 @@ const TripRoom = ({
       if (Math.abs(amt) > 0.01) result.push({ otherId, amount: amt });
     });
     return { net, details: result.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount)) };
-  }, [selectedMemberId, tripExpenses, splits, tripMembers]);
+  }, [localId, tripExpenses, splits, tripMembers]);
 
-  const handleSettle = async (otherId: string, amount: number) => {
-    const payerId = amount > 0 ? otherId : selectedMemberId!;
-    const payeeId = amount > 0 ? selectedMemberId! : otherId;
-    const settleAmt = Math.abs(amount);
+  // Use memberBalances for localId to display in the header
+  const myBalance = memberBalances?.net || 0;
 
-    const c = StDB.conn as any;
-    if (!c) return;
-    try {
-      await c.reducers.settleDebt({ tripId: trip.id, debtorId: payerId, payeeId, amount: settleAmt });
-      toast.success('Settled up!');
-    } catch (e: any) {
-      toast.error(e?.message ?? 'Failed to settle debt');
-    }
-  };
+
 
   return (
     <motion.div
@@ -289,14 +285,28 @@ const TripRoom = ({
           <span style={{ fontSize: '0.62rem', fontWeight: 500, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif' }}>Built on SpacetimeDB</span>
         </div>
 
+        <div style={{ flex: 1 }} />
+
+        {/* Global Audio Toggle */}
+        <button
+          onClick={() => AudioService.setEnabled(!AudioService.enabled)}
+          style={{ ...BTN_GHOST, padding: '8px', color: 'var(--text-dim)' }}
+          title="Toggle Audio"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+        </button>
+
         {/* Galaxy Chip (Back to Cosmos) */}
-        <button onClick={onBack} className="glass-panel" style={{ 
-           display: 'flex', alignItems: 'center', gap: '8px', 
-           padding: '6px 14px', border: '1px solid var(--glass-brd)',
-           color: 'var(--text)', cursor: 'pointer', marginLeft: '8px', borderRadius: '999px',
-           fontSize: '0.85rem', fontWeight: 600, transition: 'background 0.2s'
+        <button onClick={onBack} className="btn-ghost" style={{ 
+          padding: '8px 16px 8px 12px', fontWeight: 600, color: 'var(--text)', 
+          background: 'var(--glass)', border: '1px solid var(--glass-brd)', borderRadius: '999px',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          transition: 'background 0.2s', fontSize: '0.9rem'
         }}
-        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
         onMouseLeave={(e) => e.currentTarget.style.background = 'var(--glass)'}
         >
           <span style={{ color: 'var(--text-dim)' }}>←</span> ◍ {trip.name}
@@ -323,25 +333,25 @@ const TripRoom = ({
         position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'all',
         display: 'flex', alignItems: 'center', gap: '16px', zIndex: 20
       }}>
-        <button onClick={copyInvite} className="glass-panel" style={{ 
-          border: '1px solid var(--glass-brd)', color: 'var(--text)', padding: '0 20px', 
+        <button onClick={copyInvite} className="btn-secondary" style={{ 
+          color: 'var(--text)', padding: '0 20px', 
           display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '14px', height: '44px',
           fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
           transition: 'background 0.2s'
         }}
-        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-        onMouseLeave={(e) => e.currentTarget.style.background = 'var(--glass)'}
         title="Invite">
            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
            {copied ? 'Copied' : 'Invite'}
         </button>
 
         <button onClick={() => { setEditPayload(null); setShowModal(true); }} className="btn-primary" style={{ 
-          color: '#050a08', padding: '0 20px', 
+          color: '#ffffff', padding: '0 20px', 
           display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '14px', height: '44px',
-          fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 12px 32px rgba(255, 183, 77, 0.2)'
+          fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer',
+          boxShadow: '0 0 24px rgba(255, 183, 77, 0.4), inset 0 0 12px rgba(255,255,255,0.2)',
+          border: '1px solid rgba(255, 183, 77, 0.5)'
         }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           Add expense
         </button>
       </div>
@@ -352,9 +362,11 @@ const TripRoom = ({
         width: '340px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
         background: 'rgba(5, 6, 10, 0.65)'
       }}>
-        {/* Karma Bar directly inside Right Panel */}
-        <div style={{ padding: '20px 20px 8px', borderBottom: '1px solid var(--glass-brd)' }}>
-          <KarmaBar tripId={trip.id} />
+        <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Your Balance</div>
+          <div className="money" style={{ fontSize: '1.6rem', fontWeight: 700, color: myBalance === 0 ? 'var(--text)' : myBalance > 0 ? 'var(--owed)' : 'var(--owe)' }}>
+            {myBalance === 0 ? 'Settled up' : (myBalance > 0 ? '+' : '−') + INR(Math.abs(myBalance))}
+          </div>
         </div>
 
         <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--glass-brd)' }}>
@@ -459,74 +471,6 @@ const TripRoom = ({
         </div>
       </div>
 
-      {/* Selected Member Panel */}
-      <AnimatePresence>
-        {selectedMemberId && memberBalances && (
-          <motion.div
-            initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
-            transition={{ duration: 0.35, ease: EO }}
-            className="glass-panel"
-            style={{
-              pointerEvents: 'all', position: 'absolute', top: 72, right: 20, bottom: 24,
-              width: '340px', zIndex: 15, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-              background: 'rgba(5, 6, 10, 0.65)'
-            }}
-          >
-            <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text)' }}>
-                {selectedMemberId === localId ? 'You' : (userMap.get(selectedMemberId) || 'Member')}
-              </span>
-              <button onClick={() => onSelectMember(null)} className="btn-ghost" style={{ fontSize: '1.2rem', padding: '0 4px', width: 32, height: 32 }}>×</button>
-            </div>
-            
-            <div style={{ padding: '24px 18px', borderBottom: '1px solid var(--glass-brd)', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', fontWeight: 600 }}>Net Balance</div>
-              <div className="money" style={{ fontSize: '2rem', fontWeight: 700, color: memberBalances.net === 0 ? 'var(--text-dim)' : memberBalances.net > 0 ? 'var(--owed)' : 'var(--owe)', letterSpacing: '-0.02em' }}>
-                {INR(Math.abs(memberBalances.net))}
-              </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginTop: '4px' }}>
-                {memberBalances.net === 0 ? 'Settled up' : memberBalances.net > 0 ? 'gets back in total' : 'owes in total'}
-              </div>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
-              {memberBalances.details.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-dim)', fontSize: '0.85rem' }}>No outstanding balances.</div>
-              ) : (
-                memberBalances.details.map(({ otherId, amount }) => {
-                  const otherName = otherId === localId ? 'You' : (userMap.get(otherId) || 'Member');
-                  const isOwedToSelected = amount > 0;
-                  const owesText = isOwedToSelected ? `${otherName} owe${otherId === localId ? '' : 's'}` : `Owe${selectedMemberId === localId ? '' : 's'} ${otherName}`;
-                  return (
-                    <div key={otherId} style={{
-                      borderBottom: '1px solid var(--glass-brd)',
-                      padding: '12px 14px', marginBottom: '4px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                    }}>
-                      <div>
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', fontWeight: 500, marginBottom: '2px' }}>
-                          {owesText}
-                        </div>
-                        <div className="money" style={{ fontSize: '1rem', fontWeight: 700, color: isOwedToSelected ? 'var(--owed)' : 'var(--owe)' }}>
-                          {INR(Math.abs(amount))}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleSettle(otherId, amount)}
-                        className="btn-secondary"
-                        style={{ padding: '6px 12px', height: 'auto', borderRadius: '8px', fontSize: '0.8rem', color: isOwedToSelected ? 'var(--owed)' : 'var(--owe)' }}
-                      >
-                        Settle
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Modals */}
       <AnimatePresence>
         {showModal && (
@@ -605,6 +549,7 @@ const Dashboard = ({
       const tripId = `trip-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       await c.reducers.createTrip({ tripId, name });
       setNewTripName('');
+      AudioService.playBlip();
       onSelectTrip({ id: tripId, name });
     } catch (e: any) {
       toast.error(e?.message ?? 'Could not create galaxy.');
@@ -630,11 +575,24 @@ const Dashboard = ({
         position: 'absolute', top: 0, left: 0, right: 0, pointerEvents: 'all',
         display: 'flex', alignItems: 'center', gap: '24px', padding: '20px 28px',
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0px' }}>
           <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1 }}>SIMPLI</span>
           <span style={{ fontSize: '0.62rem', fontWeight: 500, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif' }}>Built on SpacetimeDB</span>
         </div>
         <div style={{ flex: 1 }} />
+        
+        {/* Global Audio Toggle */}
+        <button
+          onClick={() => AudioService.setEnabled(!AudioService.enabled)}
+          style={{ ...BTN_GHOST, padding: '8px', color: 'var(--text-dim)' }}
+          title="Toggle Audio"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+        </button>
+
         <img src={profile.picture} alt="" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)' }} />
         <button onClick={onLogout} className="btn-secondary" style={{ height: '34px', borderRadius: '999px', fontSize: '0.82rem' }}>Logout</button>
       </div>
@@ -658,12 +616,19 @@ const Dashboard = ({
         position: 'absolute', bottom: '32px', left: '50%', transform: 'translateX(-50%)',
         pointerEvents: 'all', width: '100%', maxWidth: '520px', padding: '0 16px', boxSizing: 'border-box'
       }}>
+        {/* Soft outer glow */}
+        <div style={{
+          position: 'absolute', inset: '0 16px', borderRadius: '999px',
+          background: 'radial-gradient(circle at 50% 50%, rgba(255,183,77,0.12) 0%, rgba(94,230,255,0.06) 50%, transparent 100%)',
+          filter: 'blur(16px)', zIndex: -1, pointerEvents: 'none'
+        }} />
         <form onSubmit={handleCreate} className="glass-pill" style={{ 
-          display: 'flex', gap: '8px', padding: '8px'
+          display: 'flex', gap: '8px', padding: '8px',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), inset 0 0 0 1px rgba(255,255,255,0.04)'
         }}>
           <input
             value={newTripName} onChange={e => setNewTripName(e.target.value)}
-            placeholder="Name a new galaxy…"
+            placeholder="Create a new group / galaxy…"
             style={{
               flex: 1, background: 'transparent', border: 'none', padding: '12px 18px', color: 'var(--text)',
               fontSize: '1rem', outline: 'none', fontFamily: 'inherit'
@@ -674,7 +639,7 @@ const Dashboard = ({
             padding: '0 24px', fontWeight: 700,
             opacity: newTripName.trim() && !creating && isConnected ? 1 : 0.4,
           }}>
-            {creating ? '…' : 'Forge'}
+            {creating ? '…' : 'Create'}
           </button>
         </form>
       </div>
@@ -892,7 +857,6 @@ function App() {
                   onBack={() => { selectTrip(null); setSelectedMemberId(null); setOverlayOpen(false); }}
                   onOverlayChange={setOverlayOpen}
                   selectedMemberId={selectedMemberId}
-                  onSelectMember={setSelectedMemberId}
                 />
               ) : (
                 <Dashboard
