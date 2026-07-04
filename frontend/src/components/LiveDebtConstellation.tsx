@@ -249,7 +249,6 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
           const r = amount / maxPairDebt;
           const dimmed = hoveredStar && hoveredStar !== a.id && hoveredStar !== b.id;
           const lineColor = new THREE.Color('#22D3EE').lerp(new THREE.Color('#FF3D81'), r);
-          const segLen = a.position.distanceTo(b.position);
 
           return (
             <Line
@@ -259,9 +258,6 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
               lineWidth={1 + r * 5}
               transparent
               opacity={dimmed ? 0.12 : (0.3 + r * 0.55)}
-              dashed
-              dashSize={segLen * 0.06}
-              gapSize={segLen * 0.04}
               toneMapped={false}
             />
           );

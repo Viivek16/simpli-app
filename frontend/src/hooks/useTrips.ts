@@ -40,17 +40,17 @@ export function useTrip(): Trip[] {
               .filter((m: any) => norm(memberUserId(m)) === me)
               .map(memberTripId)
           );
-          // If we have trip_member rows but none match, fall back to all trips
-          // (protects against a format mismatch hiding the user's real trips)
           const allTrips = [...c.db.trip.iter()];
-          const filteredTrips = allTrips.filter((t: any) => myTripIds.has(t.id));
+          const membersOf = (tId: string) => [...c.db.trip_member.iter()].filter((m: any) => memberTripId(m) === tId);
+
+          const filteredTrips = allTrips.filter((t: any) => {
+            const mems = membersOf(t.id);
+            if (!me || myTripIds.has(t.id) || mems.length === 0) return true;
+            console.warn(`[useTrip] Hiding trip ${t.id} (user not in ${mems.length} members)`);
+            return false;
+          });
           
-          if (allTrips.length > 0 && filteredTrips.length === 0) {
-            console.warn('[useTrip] Filter matched zero trips but DB has rows — falling back to all');
-            rows = allTrips.map((t: any) => ({ id: t.id, name: t.name }));
-          } else {
-            rows = filteredTrips.map((t: any) => ({ id: t.id, name: t.name }));
-          }
+          rows = filteredTrips.map((t: any) => ({ id: t.id, name: t.name }));
         }
 
         if (!destroyed) setTrips(rows);

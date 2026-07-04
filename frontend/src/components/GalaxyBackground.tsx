@@ -19,7 +19,7 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { LiveDebtConstellation } from './LiveDebtConstellation';
 import { ErrorBoundary } from './ErrorBoundary';
-import { useTrip, type Trip } from '../hooks/useTrips';
+import type { Trip } from '../hooks/useTrips';
 
 // Stable color palette hashed from trip id (Phase 2.1)
 const PALETTE = [
@@ -188,7 +188,7 @@ const GalaxyScene = ({
 
   return (
     <>
-      <fog attach="fog" args={activeTripId ? ['#02050a', 40, 120] : ['#02050a', 60, 140]} />
+      {!activeTripId && <fog attach="fog" args={['#02050a', 60, 140]} />}
       <ambientLight intensity={activeTripId ? 0.04 : 0.08} />
 
       <OrbitControls
@@ -248,6 +248,7 @@ const CosmosFallback = ({ trips, onSelectTrip }: { trips: Trip[]; onSelectTrip?:
 );
 
 interface GBProps {
+  trips: Trip[];
   activeTripId: string | null;
   onSelectTrip: (t: Trip) => void;
   uiPaused: boolean;
@@ -256,8 +257,7 @@ interface GBProps {
   onStarClick: (id: string | null) => void;
 }
 
-export const GalaxyBackground = ({ activeTripId, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick }: GBProps) => {
-  const trips = useTrip();
+export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick }: GBProps) => {
 
   return (
     <div style={{

@@ -4,7 +4,6 @@ import * as StDB from '../spacetimedb';
 import { toast } from './Toast';
 import type { Expense, ExpenseSplit } from '../module_bindings/types';
 
-const EO = [0.23, 1, 0.32, 1] as const;
 const INR = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(v);
 
@@ -39,7 +38,6 @@ type SplitMode = 'equally' | 'unequal' | 'shares' | 'personal';
 interface MemberRow { id: string; name: string; }
 interface Props {
   tripId: string;
-  tripName: string;
   tripMembers: MemberRow[];
   onClose: () => void;
   editExpense?: Expense & { splits: ExpenseSplit[] };
@@ -53,7 +51,7 @@ const Spinner = () => (
   </svg>
 );
 
-export const ExpenseModal = ({ tripId, tripName, tripMembers, onClose, editExpense }: Props) => {
+export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Props) => {
   const uid = useId();
   const isEdit = !!editExpense;
 
@@ -216,42 +214,35 @@ export const ExpenseModal = ({ tripId, tripName, tripMembers, onClose, editExpen
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 300,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
       pointerEvents: 'all',
     }}>
-      {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.16 }} onClick={onClose}
-        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(16px)' }}
+        transition={{ duration: 0.16 }}
+        onClick={onClose}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)' }}
       />
-
       <motion.form
-        initial={{ opacity: 0, scale: 0.95, y: 16 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.97, y: 8 }}
-        transition={{ duration: 0.22, ease: EO }}
-        onClick={e => e.stopPropagation()} onSubmit={submit}
+        onSubmit={submit}
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
         style={{
-          position: 'relative', zIndex: 1, pointerEvents: 'all',
-          width: '100%', maxWidth: '480px',
-          background: 'rgba(12,16,14,0.98)',
-          border: '1px solid rgba(156,174,169,0.18)',
-          borderRadius: '20px', padding: '32px',
+          position: 'relative', width: '100%', maxWidth: '560px',
+          maxHeight: '56vh', overflowY: 'auto',
+          background: 'rgba(12,14,13,0.92)', borderTop: '1px solid rgba(255,255,255,0.08)',
+          borderLeft: '1px solid rgba(255,255,255,0.08)', borderRight: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '22px 22px 0 0', padding: '24px 28px',
           display: 'flex', flexDirection: 'column', gap: '20px',
-          boxShadow: '0 32px 80px rgba(0,0,0,0.9)',
-          maxHeight: '90vh', overflowY: 'auto',
+          boxShadow: '0 -20px 80px rgba(0,0,0,0.8)', backdropFilter: 'blur(32px)', WebkitBackdropFilter: 'blur(32px)'
         }}
       >
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#f8f9fa' }}>
-              {isEdit ? 'Edit Expense' : 'Add Expense'}
-            </h2>
-            <p style={{ margin: '4px 0 0', color: '#8e8e93', fontSize: '0.82rem' }}>{tripName}</p>
-          </div>
-          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: '1.3rem', padding: '0 0 0 16px', lineHeight: 1 }}>×</button>
+        <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.15)', borderRadius: '2px', margin: '-10px auto 10px' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#e0e8e5' }}>
+            {isEdit ? 'Edit expense' : 'Add expense'}
+          </h2>
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#888', fontSize: '1.5rem', cursor: 'pointer', padding: '0 4px', lineHeight: 1 }}>×</button>
         </div>
 
         {/* Split mode tabs */}

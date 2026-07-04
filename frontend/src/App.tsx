@@ -66,9 +66,10 @@ interface EditPayload {
 }
 
 const TripRoom = ({
-  trip, profile, isConnected, onBack,
+  trip, profile, isConnected, onBack, onOverlayChange, selectedMemberId, onSelectMember
 }: {
   trip: Trip; profile: GoogleProfile; isConnected: boolean; onBack: () => void;
+  onOverlayChange: (v: boolean) => void; selectedMemberId: string | null; onSelectMember: (id: string | null) => void;
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [editPayload, setEditPayload] = useState<EditPayload | null>(null);
@@ -113,13 +114,23 @@ const TripRoom = ({
   };
 
   // Detect if trip was deleted while viewing
-  const tripExists = useTrip().some(t => t.id === trip.id);
   useEffect(() => {
-    if (!tripExists && StDB.subscriptionApplied) {
-      toast.info(`"${trip.name}" was deleted`);
-      onBack();
-    }
-  }, [tripExists, StDB.subscriptionApplied]);
+    const c = StDB.conn as any;
+    if (!c) return;
+    const onDel = (row: any) => {
+      if (row?.id === trip.id) {
+        toast.info(`"${trip.name}" was deleted`);
+        onBack();
+      }
+    };
+    c.db.trip.onDelete(onDel);
+    return () => c.db.trip.removeOnDelete(onDel);
+  }, [trip.id, trip.name, onBack]);
+
+  // Sync overlay status with App to pause background
+  useEffect(() => {
+    onOverlayChange(showModal || showDeleteTrip || selectedMemberId !== null);
+  }, [showModal, showDeleteTrip, selectedMemberId, onOverlayChange]);
 
   const handleDeleteExpense = async (expId: string, desc: string) => {
     if (deleteConfirm !== expId) {
@@ -180,6 +191,55 @@ const TripRoom = ({
     return groups;
   }, [tripExpenses]);
 
+  const memberBalances = useMemo(() => {
+    if (!selectedMemberId) return null;
+    const balances = new Map<string, number>();
+    tripMembers.forEach(m => {
+       if (m.id !== selectedMemberId) balances.set(m.id, 0);
+    });
+
+    tripExpenses.forEach(exp => {
+      const payer = norm(exp.payerId);
+      const expSplits = splits.filter(s => s.expenseId === exp.id);
+      
+      expSplits.forEach(s => {
+        const debtor = norm(s.debtorId);
+        if (payer === debtor) return;
+        
+        if (payer === selectedMemberId && debtor !== selectedMemberId) {
+          const current = balances.get(debtor) || 0;
+          balances.set(debtor, current + s.amountOwed);
+        } else if (debtor === selectedMemberId && payer !== selectedMemberId) {
+          const current = balances.get(payer) || 0;
+          balances.set(payer, current - s.amountOwed);
+        }
+      });
+    });
+
+    const result: { otherId: string; amount: number }[] = [];
+    let net = 0;
+    balances.forEach((amt, otherId) => {
+      net += amt;
+      if (Math.abs(amt) > 0.01) result.push({ otherId, amount: amt });
+    });
+    return { net, details: result.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount)) };
+  }, [selectedMemberId, tripExpenses, splits, tripMembers]);
+
+  const handleSettle = async (otherId: string, amount: number) => {
+    const payerId = amount > 0 ? otherId : selectedMemberId!;
+    const payeeId = amount > 0 ? selectedMemberId! : otherId;
+    const settleAmt = Math.abs(amount);
+
+    const c = StDB.conn as any;
+    if (!c) return;
+    try {
+      await c.reducers.settleDebt({ tripId: trip.id, debtorId: payerId, payeeId, amount: settleAmt });
+      toast.success('Settled up!');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Failed to settle debt');
+    }
+  };
+
   return (
     <motion.div
       key="trip-room"
@@ -218,21 +278,25 @@ const TripRoom = ({
         <img src={profile.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)' }} />
       </div>
 
-      {/* Floating Add Expense button */}
-      <div style={{ position: 'absolute', bottom: '32px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'all' }}>
-        <motion.button
-          whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+      {/* Bottom Dock */}
+      <div style={{
+        position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'all',
+        display: 'flex', alignItems: 'center', gap: '8px',
+        background: 'rgba(16,20,18,0.65)', backdropFilter: 'blur(32px)', WebkitBackdropFilter: 'blur(32px)',
+        border: '1px solid rgba(255,255,255,0.08)', borderRadius: '32px', padding: '6px',
+        boxShadow: '0 16px 40px rgba(0,0,0,0.6)', zIndex: 20
+      }}>
+        <button onClick={copyInvite} style={{ ...BTN_GHOST, background: 'transparent', border: 'none', color: '#9bafa4', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '6px' }} title="Invite">
+           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
+           {copied ? 'Copied' : 'Invite'}
+        </button>
+        <button
           onClick={() => { setEditPayload(null); setShowModal(true); }}
-          style={{
-            background: 'rgba(156,174,169,0.12)', backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)', border: '1px solid rgba(156,174,169,0.28)',
-            borderRadius: '32px', padding: '14px 28px', color: '#fff', fontWeight: 700,
-            fontSize: '1rem', cursor: 'pointer', boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
-            display: 'flex', alignItems: 'center', gap: '8px', fontFamily: 'inherit',
-          }}
+          style={{ ...BTN_GHOST, background: '#9bafa4', color: '#050a08', border: 'none', borderRadius: '24px', padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>+</span> Add expense
-        </motion.button>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          Add expense
+        </button>
       </div>
 
       {/* Right panel — Ledger */}
@@ -245,24 +309,11 @@ const TripRoom = ({
         boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
       }}>
         <div style={{ padding: '16px 18px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
             <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#555' }}>
               Trip Ledger {tripExpenses.length > 0 && `· ${tripExpenses.length}`}
             </span>
           </div>
-          <button onClick={copyInvite} style={{
-            width: '100%', background: 'rgba(156,174,169,0.06)', border: '1px solid rgba(156,174,169,0.12)',
-            borderRadius: '10px', padding: '9px 12px', cursor: 'pointer', textAlign: 'left',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            fontFamily: 'inherit', transition: 'background 180ms ease',
-          }}>
-            <span style={{ fontSize: '0.72rem', color: '#555', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {shareLink}
-            </span>
-            <span style={{ fontSize: '0.72rem', fontWeight: 600, color: copied ? '#6fba8a' : '#9bafa4', flexShrink: 0, marginLeft: '8px' }}>
-              {copied ? 'Copied!' : 'Copy invite'}
-            </span>
-          </button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
@@ -352,12 +403,79 @@ const TripRoom = ({
         </div>
       </div>
 
+      {/* Selected Member Panel */}
+      <AnimatePresence>
+        {selectedMemberId && memberBalances && (
+          <motion.div
+            initial={{ x: '100%', opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: '100%', opacity: 0 }}
+            transition={{ duration: 0.35, ease: EO }}
+            style={{
+              pointerEvents: 'all', position: 'absolute', top: 72, right: 20, bottom: 24,
+              width: '340px', zIndex: 15,
+              background: 'rgba(8,12,10,0.85)', backdropFilter: 'blur(24px)',
+              WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e0e8e5' }}>
+                {userMap.get(selectedMemberId) || 'Member'}
+              </span>
+              <button onClick={() => onSelectMember(null)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem', padding: '0 4px' }}>×</button>
+            </div>
+            
+            <div style={{ padding: '24px 18px', borderBottom: '1px solid rgba(255,255,255,0.05)', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.7rem', color: '#6a7a76', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Net Balance</div>
+              <div style={{ fontSize: '2rem', fontWeight: 700, color: memberBalances.net === 0 ? '#9bafa4' : memberBalances.net > 0 ? '#6fba8a' : '#d98a6c', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>
+                {INR(Math.abs(memberBalances.net))}
+              </div>
+              <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '4px' }}>
+                {memberBalances.net === 0 ? 'Settled up' : memberBalances.net > 0 ? 'gets back in total' : 'owes in total'}
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
+              {memberBalances.details.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#555', fontSize: '0.85rem' }}>No outstanding balances.</div>
+              ) : (
+                memberBalances.details.map(({ otherId, amount }) => {
+                  const otherName = userMap.get(otherId) || 'Member';
+                  const isOwedToSelected = amount > 0;
+                  return (
+                    <div key={otherId} style={{
+                      background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)',
+                      borderRadius: '12px', padding: '12px 14px', marginBottom: '8px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '0.85rem', color: '#e0e8e5', fontWeight: 500, marginBottom: '2px' }}>
+                          {isOwedToSelected ? `${otherName} owes` : `Owes ${otherName}`}
+                        </div>
+                        <div style={{ fontSize: '1rem', fontWeight: 700, color: isOwedToSelected ? '#6fba8a' : '#d98a6c', fontVariantNumeric: 'tabular-nums' }}>
+                          {INR(Math.abs(amount))}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleSettle(otherId, amount)}
+                        style={{ ...BTN_GHOST, padding: '6px 12px', color: '#050a08', background: isOwedToSelected ? '#6fba8a' : '#d98a6c', border: 'none', borderRadius: '8px' }}
+                      >
+                        Settle
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Modals */}
       <AnimatePresence>
         {showModal && (
           <ExpenseModal
             tripId={trip.id}
-            tripName={trip.name}
             tripMembers={tripMembers}
             onClose={() => { setShowModal(false); setEditPayload(null); }}
             editExpense={editPayload ? { ...editPayload.expense, splits: editPayload.splits } : undefined}
@@ -433,10 +551,10 @@ const TripRoom = ({
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 const Dashboard = ({
-  profile, isConnected, onLogout, onSelectTrip, subReady,
+  profile, isConnected, onLogout, onSelectTrip, subReady, trips,
 }: {
   profile: GoogleProfile; isConnected: boolean; onLogout: () => void;
-  onSelectTrip: (t: Trip) => void; subReady: boolean;
+  onSelectTrip: (t: Trip) => void; subReady: boolean; trips: Trip[];
 }) => {
   const [newTripName, setNewTripName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -478,13 +596,11 @@ const Dashboard = ({
         position: 'absolute', top: 0, left: 0, right: 0, pointerEvents: 'all',
         display: 'flex', alignItems: 'center', gap: '12px', padding: '20px 28px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: '10px', fontWeight: 900, fontSize: '1.1rem', color: '#9bafa4',
-            background: 'linear-gradient(135deg, rgba(156,174,169,0.2), rgba(156,174,169,0.04))',
-            border: '1px solid rgba(156,174,169,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>S</div>
-          <span style={{ fontWeight: 800, fontSize: '1.1rem', letterSpacing: '-0.03em', color: '#f8f9fa' }}>SIMPLI</span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+          <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.04em', color: '#f8f9fa' }}>SIMPLI</span>
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a7a76', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            {profile.name.split(' ')[0]}'s cosmos
+          </span>
         </div>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 11px', borderRadius: '20px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -495,39 +611,43 @@ const Dashboard = ({
         <button onClick={onLogout} style={{ ...BTN_GHOST, padding: '7px 14px', fontSize: '0.82rem' }}>Logout</button>
       </div>
 
-      {/* Center island */}
-      <div style={{
-        pointerEvents: 'all', width: '100%', maxWidth: '560px',
-        background: 'rgba(16,20,18,0.45)', backdropFilter: 'blur(32px)',
-        WebkitBackdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: '28px', padding: '36px 40px',
-        display: 'flex', flexDirection: 'column', gap: '28px',
-        boxShadow: '0 32px 80px rgba(0,0,0,0.6)',
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 800, letterSpacing: '-0.04em', color: '#f8f9fa' }}>
-            {profile.name.split(' ')[0]}'s cosmos
-          </h1>
-          <p style={{ margin: '8px 0 0', color: '#6a7a76', fontSize: '1rem' }}>
-            {!subReady ? 'Charting the cosmos…' : 'Select a galaxy or forge a new one.'}
-          </p>
+      {/* Empty State */}
+      {subReady && trips.length === 0 && (
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', opacity: 0.6
+        }}>
+          <div style={{ fontSize: '1.1rem', color: '#8e8e93', fontWeight: 500 }}>Forge your first galaxy</div>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#6a7a76' }}>
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <polyline points="19 12 12 19 5 12"></polyline>
+          </svg>
         </div>
+      )}
 
-        <form onSubmit={handleCreate} style={{ display: 'flex', gap: '10px' }}>
+      {/* Bottom Create Bar */}
+      <div style={{
+        position: 'absolute', bottom: '28px', left: '50%', transform: 'translateX(-50%)',
+        pointerEvents: 'all', width: '100%', maxWidth: '520px', padding: '0 16px', boxSizing: 'border-box'
+      }}>
+        <form onSubmit={handleCreate} style={{ 
+          display: 'flex', gap: '8px', background: 'rgba(16,20,18,0.75)', backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '32px', padding: '6px'
+        }}>
           <input
             value={newTripName} onChange={e => setNewTripName(e.target.value)}
-            placeholder="Name your new galaxy…"
+            placeholder="Name a new galaxy…"
             style={{
-              flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)',
-              borderRadius: '14px', padding: '14px 18px', color: 'white', fontSize: '0.95rem', outline: 'none',
-              fontFamily: 'inherit',
+              flex: 1, background: 'transparent', border: 'none', padding: '12px 18px', color: 'white',
+              fontSize: '1rem', outline: 'none', fontFamily: 'inherit'
             }}
           />
           <button type="submit" disabled={!newTripName.trim() || creating || !isConnected} style={{
-            background: '#9bafa4', color: '#050a08', border: 'none', borderRadius: '14px',
-            padding: '0 22px', fontWeight: 700, cursor: 'pointer',
+            background: '#9bafa4', color: '#050a08', border: 'none', borderRadius: '24px',
+            padding: '0 24px', fontWeight: 700, cursor: 'pointer',
             opacity: newTripName.trim() && !creating && isConnected ? 1 : 0.4,
-            transition: 'opacity 180ms ease', fontFamily: 'inherit', fontSize: '0.95rem',
+            transition: 'opacity 180ms ease', fontFamily: 'inherit', fontSize: '0.95rem'
           }}>
             {creating ? '…' : 'Forge'}
           </button>
@@ -620,7 +740,10 @@ function App() {
 
   const [subReady, setSubReady] = useState(StDB.subscriptionApplied);
   const [hoveredStar, setHoveredStar] = useState<string | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [overlayOpen, setOverlayOpen] = useState(false);
   const isConnected = useIsConnected();
+  const trips = useTrip();
 
   const selectTrip = useCallback((t: Trip | null) => {
     if (t) {
@@ -715,21 +838,20 @@ function App() {
     selectTrip(null);
   };
 
-  // uiPaused = any overlay modal is open → pause Canvas render loop
-  const uiPaused = false; // expenseModal lives inside TripRoom, not here
-
+  // No local uiPaused var, using overlayOpen directly
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100dvh', background: '#020508', overflow: 'hidden' }}>
       <Toaster />
 
       <ErrorBoundary fallback={<div style={{ position: 'fixed', inset: 0, background: '#020508' }} />}>
         <GalaxyBackground
+          trips={trips}
           activeTripId={selectedTrip?.id ?? null}
           onSelectTrip={selectTrip}
-          uiPaused={uiPaused}
+          uiPaused={overlayOpen}
           hoveredStar={hoveredStar}
           onStarHover={setHoveredStar}
-          onStarClick={(_id) => { /* Phase 2.3: star panel */ }}
+          onStarClick={setSelectedMemberId}
         />
       </ErrorBoundary>
 
@@ -745,7 +867,10 @@ function App() {
                   trip={selectedTrip}
                   profile={profile}
                   isConnected={isConnected}
-                  onBack={() => selectTrip(null)}
+                  onBack={() => { selectTrip(null); setSelectedMemberId(null); setOverlayOpen(false); }}
+                  onOverlayChange={setOverlayOpen}
+                  selectedMemberId={selectedMemberId}
+                  onSelectMember={setSelectedMemberId}
                 />
               ) : (
                 <Dashboard
@@ -755,6 +880,7 @@ function App() {
                   onLogout={handleLogout}
                   onSelectTrip={selectTrip}
                   subReady={subReady}
+                  trips={trips}
                 />
               )}
             </AnimatePresence>
