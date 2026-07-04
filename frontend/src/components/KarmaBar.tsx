@@ -1,96 +1,90 @@
+import { useEffect, useMemo } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
 import { useExpense, useExpenseSplit } from '../module_bindings/hooks';
-import { localIdentity } from '../spacetimedb';
+import * as StDB from '../spacetimedb';
 
-interface Props {
-  tripId: string;
-}
+const INR = (v: number) =>
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+
+const norm = (s: any) => String(s ?? '').toLowerCase().trim();
+
+interface Props { tripId: string; }
 
 export const KarmaBar = ({ tripId }: Props) => {
   const splits = useExpenseSplit();
   const expenses = useExpense();
+  const me = norm(StDB.localIdentity ?? '');
 
-  // Scope to the active trip and compute the local user's net balance.
-  let netBalance = 0;
-  if (localIdentity) {
+  const netBalance = useMemo(() => {
+    if (!me) return 0;
+    let bal = 0;
     const tripExpenses = expenses.filter(e => e.tripId === tripId);
     tripExpenses.forEach(expense => {
       const expSplits = splits.filter(s => s.expenseId === expense.id);
       expSplits.forEach(split => {
-        if (expense.payerId === localIdentity && split.debtorId !== localIdentity) {
-          netBalance += split.amountOwed; // others owe me
-        } else if (split.debtorId === localIdentity && expense.payerId !== localIdentity) {
-          netBalance -= split.amountOwed; // I owe others
-        }
+        const payer = norm(expense.payerId);
+        const debtor = norm(split.debtorId);
+        if (payer === me && debtor !== me) bal += split.amountOwed; // others owe me
+        else if (debtor === me && payer !== me) bal -= split.amountOwed; // I owe others
       });
     });
-  }
+    return bal;
+  }, [me, tripId, expenses, splits]);
 
-  const maxThreshold = 100;
-  const cappedBalance = Math.max(-maxThreshold, Math.min(maxThreshold, netBalance));
-  const targetPercentage = 50 + (cappedBalance / maxThreshold) * 50;
+  // Dynamic max: largest |balance| in trip, floor ₹100
+  const maxThreshold = useMemo(() => {
+    if (!me) return 100;
+    const allBalances: number[] = [];
+    const memberMap = new Map<string, number>();
+    expenses.filter(e => e.tripId === tripId).forEach(expense => {
+      splits.filter(s => s.expenseId === expense.id).forEach(split => {
+        const p = norm(expense.payerId);
+        const d = norm(split.debtorId);
+        memberMap.set(p, (memberMap.get(p) || 0) + split.amountOwed);
+        memberMap.set(d, (memberMap.get(d) || 0) - split.amountOwed);
+      });
+    });
+    memberMap.forEach(v => allBalances.push(Math.abs(v)));
+    return Math.max(100, ...allBalances);
+  }, [me, tripId, expenses, splits]);
 
-  const springConfig = { stiffness: 280, damping: 28 };
-  const animatedPercentage = useSpring(50, springConfig);
-  animatedPercentage.set(targetPercentage);
+  // Fill from center: 50 = neutral, >50 = owed (green right), <50 = owe (terracotta left)
+  const pct = 50 + (Math.max(-maxThreshold, Math.min(maxThreshold, netBalance)) / maxThreshold) * 50;
+  const springConfig = { stiffness: 300, damping: 30 };
+  const animatedPct = useSpring(50, springConfig);
 
-  const barColor = useTransform(
-    animatedPercentage,
-    [0, 50, 100],
-    ['#c0715a', '#3a3a3c', '#6fba8a']
-  );
+  // RULE: animatedPercentage.set() lives in useEffect, NOT in render (Phase 5.4)
+  useEffect(() => { animatedPct.set(pct); }, [pct, animatedPct]);
 
-  const isPositive = netBalance > 0.005;
-  const isNegative = netBalance < -0.005;
-  const label = isPositive
-    ? `You're owed $${netBalance.toFixed(2)}`
-    : isNegative
-    ? `You owe $${Math.abs(netBalance).toFixed(2)}`
-    : 'All settled up';
+  const barColor = useTransform(animatedPct, [0, 50, 100], ['#d98a6c', '#2a2e2c', '#6fba8a']);
+  const barLeft = useTransform(animatedPct, p => p >= 50 ? '50%' : `${p}%`);
+  const barWidth = useTransform(animatedPct, p => `${Math.abs(p - 50)}%`);
+
+  const isPos = netBalance > 0.5;
+  const isNeg = netBalance < -0.5;
+  const label = isPos ? `You're owed ${INR(netBalance)}` : isNeg ? `You owe ${INR(Math.abs(netBalance))}` : 'All settled up';
 
   return (
     <div style={{ width: '100%' }}>
-      {/* Header row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-        <span style={{
-          fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em',
-          textTransform: 'uppercase', color: 'rgba(111,186,138,0.6)',
-        }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#444' }}>
           Karma Balance
         </span>
         <motion.span
           key={label}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+          initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
           style={{
-            fontSize: '0.82rem', fontWeight: 700,
-            color: isPositive ? '#6fba8a' : isNegative ? '#c0715a' : 'rgba(255,255,255,0.35)',
+            fontSize: '0.78rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+            color: isPos ? '#6fba8a' : isNeg ? '#d98a6c' : 'rgba(255,255,255,0.25)',
           }}
-        >
-          {label}
-        </motion.span>
+        >{label}</motion.span>
       </div>
-
-      {/* Track */}
-      <div style={{
-        height: '3px',
-        background: 'rgba(255,255,255,0.06)',
-        borderRadius: '99px',
-        overflow: 'hidden',
-        position: 'relative',
-      }}>
-        {/* Centre marker */}
-        <div style={{
-          position: 'absolute', left: '50%', top: 0, bottom: 0,
-          width: '1px', background: 'rgba(255,255,255,0.12)',
-        }} />
+      <div style={{ height: '3px', background: 'rgba(255,255,255,0.05)', borderRadius: '99px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: '1px', background: 'rgba(255,255,255,0.1)' }} />
         <motion.div style={{
-          position: 'absolute',
-          height: '100%',
-          borderRadius: '99px',
-          width: useTransform(animatedPercentage, p => `${p}%`),
-          backgroundColor: barColor,
+          position: 'absolute', height: '100%', borderRadius: '99px',
+          left: barLeft, width: barWidth, backgroundColor: barColor,
         }} />
       </div>
     </div>

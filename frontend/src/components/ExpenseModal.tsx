@@ -1,123 +1,231 @@
-import { useState, useId } from 'react';
+import { useState, useId, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import * as SpacetimeDB from '../spacetimedb';
+import * as StDB from '../spacetimedb';
+import { toast } from './Toast';
+import type { Expense, ExpenseSplit } from '../module_bindings/types';
 
 const EO = [0.23, 1, 0.32, 1] as const;
+const INR = (v: number) =>
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(v);
 
-const INPUT: React.CSSProperties = {
-  width: '100%', boxSizing: 'border-box',
-  background: 'rgba(255,255,255,0.05)',
-  border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: '10px', padding: '10px 14px',
-  color: 'white', fontSize: '0.9rem', outline: 'none',
-  transition: 'border-color 180ms ease',
-  fontFamily: 'inherit',
-};
-const BTN_PRIMARY: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #d98a6c 0%, #bf6645 100%)', // Terracotta theme
-  color: '#ffffff', border: 'none', borderRadius: '10px',
-  padding: '10px 20px', fontWeight: 700, fontSize: '0.9rem',
-  cursor: 'pointer', flexShrink: 0, display: 'flex',
-  alignItems: 'center', justifyContent: 'center', gap: '8px', whiteSpace: 'nowrap',
-  transition: 'opacity 160ms ease, transform 160ms ease',
-  fontFamily: 'inherit',
-};
-const BTN_GHOST: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.05)',
-  border: '1px solid rgba(255,255,255,0.1)',
-  color: '#999', borderRadius: '10px',
-  padding: '10px 18px', fontWeight: 600,
-  fontSize: '0.9rem', cursor: 'pointer', flexShrink: 0,
-  transition: 'background 160ms ease, color 160ms ease',
-  fontFamily: 'inherit',
+const S: Record<string, React.CSSProperties> = {
+  input: {
+    width: '100%', boxSizing: 'border-box',
+    background: 'rgba(255,255,255,0.05)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: '10px', padding: '10px 14px',
+    color: 'white', fontSize: '0.9rem', outline: 'none',
+    fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums',
+    transition: 'border-color 180ms ease',
+  },
+  btnPrimary: {
+    background: 'linear-gradient(135deg, #9bafa4 0%, #6d8f84 100%)',
+    color: '#050a08', border: 'none', borderRadius: '10px',
+    padding: '11px 22px', fontWeight: 700, fontSize: '0.9rem',
+    cursor: 'pointer', flexShrink: 0, display: 'flex',
+    alignItems: 'center', justifyContent: 'center', gap: '8px',
+    fontFamily: 'inherit', transition: 'opacity 160ms ease',
+  },
+  btnGhost: {
+    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+    color: '#999', borderRadius: '10px', padding: '11px 18px', fontWeight: 600,
+    fontSize: '0.9rem', cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit',
+    transition: 'background 160ms ease',
+  },
 };
 
-const Spinner = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ animation: 'simpli-spin 0.7s linear infinite' }}>
-    <style>{`@keyframes simpli-spin { to { transform:rotate(360deg) } }`}</style>
-    <circle cx="9" cy="9" r="7" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
-    <path d="M9 2a7 7 0 0 1 7 7" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
-  </svg>
-);
+type SplitMode = 'equally' | 'unequal' | 'shares' | 'personal';
 
+interface MemberRow { id: string; name: string; }
 interface Props {
   tripId: string;
   tripName: string;
+  tripMembers: MemberRow[];
   onClose: () => void;
+  editExpense?: Expense & { splits: ExpenseSplit[] };
 }
 
-export const ExpenseModal = ({ tripId, tripName, onClose }: Props) => {
-  const [desc, setDesc] = useState('');
-  const [amt, setAmt] = useState('');
-  const [expenseType, setExpenseType] = useState<'group' | 'personal'>('group');
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const uid = useId();
+const Spinner = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ animation: 's-spin 0.7s linear infinite' }}>
+    <style>{`@keyframes s-spin{to{transform:rotate(360deg)}}`}</style>
+    <circle cx="8" cy="8" r="6" stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
+    <path d="M8 2a6 6 0 0 1 6 6" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErr(null);
-    const c = SpacetimeDB.conn as any;
-    if (!c) { setErr('Not connected.'); return; }
-    
-    const amount = parseFloat(amt);
-    if (!desc.trim() || isNaN(amount) || amount <= 0) {
-      setErr('Enter a valid description and amount.');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const isPersonal = expenseType === 'personal';
-      const memberIds = [...(c.db.trip_member || c.db.tripMember).iter()]
-        .filter((m: any) => (m.tripId || m.trip_id) === tripId)
-        .map((m: any) => m.userId || m.user_id);
-      
-      const per = memberIds.length ? amount / memberIds.length : amount;
-      const splitsArr = isPersonal
-        ? []
-        : memberIds.map((uid: string) => ({ debtor_id: uid, amount_owed: per }));
-      
-      if (!isPersonal && splitsArr.length) {
-        const drift = amount - splitsArr.reduce((s: number, x: any) => s + x.amount_owed, 0);
-        splitsArr[0].amount_owed += drift;
-      }
-      
-      await c.reducers.addExpense({
-        expenseId: `exp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        tripId,
-        amount,
-        description: desc.trim(),
-        splits: JSON.stringify(splitsArr),
-      });
-      onClose();
-    } catch (e: any) {
-      const msg = e?.message || 'Failed to add expense';
-      console.error('add_expense failed:', e);
-      setErr(msg);
-    } finally { 
-      setLoading(false); 
-    }
+export const ExpenseModal = ({ tripId, tripName, tripMembers, onClose, editExpense }: Props) => {
+  const uid = useId();
+  const isEdit = !!editExpense;
+
+  // Infer initial split mode from editExpense
+  const inferMode = (): SplitMode => {
+    if (!editExpense) return 'equally';
+    if (editExpense.splits.length === 0) return 'personal';
+    const amounts = editExpense.splits.map(s => s.amountOwed);
+    const allEqual = amounts.every(a => Math.abs(a - amounts[0]) < 0.01);
+    return allEqual ? 'equally' : 'unequal';
   };
 
+  const [desc, setDesc] = useState(editExpense?.description ?? '');
+  const [amt, setAmt] = useState(editExpense ? String(editExpense.amount) : '');
+  const [mode, setMode] = useState<SplitMode>(inferMode);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Selected participants (default: all members)
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    if (editExpense && editExpense.splits.length > 0) {
+      return new Set(editExpense.splits.map(s => s.debtorId));
+    }
+    return new Set(tripMembers.map(m => m.id));
+  });
+
+  // Per-member unequal amounts
+  const [unequalAmts, setUnequalAmts] = useState<Record<string, string>>(() => {
+    if (editExpense && editExpense.splits.length > 0) {
+      const obj: Record<string, string> = {};
+      editExpense.splits.forEach(s => { obj[s.debtorId] = String(s.amountOwed); });
+      return obj;
+    }
+    return {};
+  });
+
+  // Per-member shares
+  const [shares, setShares] = useState<Record<string, string>>(() => {
+    const obj: Record<string, string> = {};
+    tripMembers.forEach(m => { obj[m.id] = '1'; });
+    return obj;
+  });
+
+  const totalAmt = parseFloat(amt) || 0;
+  const selectedArr = tripMembers.filter(m => selected.has(m.id));
+
+  // Live "remaining" for unequal
+  const unequalSum = selectedArr.reduce((s, m) => s + (parseFloat(unequalAmts[m.id] || '0') || 0), 0);
+  const remaining = Math.round((totalAmt - unequalSum) * 100) / 100;
+
+  // Computed amounts for shares mode
+  const totalShares = selectedArr.reduce((s, m) => s + (parseInt(shares[m.id] || '1') || 1), 0);
+  const shareAmounts: Record<string, number> = {};
+  if (mode === 'shares' && selectedArr.length > 0) {
+    let accum = 0;
+    selectedArr.forEach((m, i) => {
+      const s = parseInt(shares[m.id] || '1') || 1;
+      const a = i === selectedArr.length - 1
+        ? Math.round((totalAmt - accum) * 100) / 100
+        : Math.round((totalAmt * s / totalShares) * 100) / 100;
+      shareAmounts[m.id] = a;
+      accum += a;
+    });
+  }
+
+  const buildSplitsArr = (): { debtor_id: string; amount_owed: number }[] => {
+    if (mode === 'personal') return [];
+    if (mode === 'equally') {
+      const per = Math.floor((totalAmt / selectedArr.length) * 100) / 100;
+      const drift = Math.round((totalAmt - per * selectedArr.length) * 100) / 100;
+      return selectedArr.map((m, i) => ({
+        debtor_id: m.id,
+        amount_owed: i === 0 ? Math.round((per + drift) * 100) / 100 : per,
+      }));
+    }
+    if (mode === 'unequal') {
+      return selectedArr.map(m => ({
+        debtor_id: m.id,
+        amount_owed: Math.round((parseFloat(unequalAmts[m.id] || '0') || 0) * 100) / 100,
+      }));
+    }
+    if (mode === 'shares') {
+      return selectedArr.map(m => ({ debtor_id: m.id, amount_owed: shareAmounts[m.id] || 0 }));
+    }
+    return [];
+  };
+
+  const canSubmit = (() => {
+    if (!desc.trim() || !totalAmt || totalAmt <= 0) return false;
+    if (mode === 'equally' || mode === 'personal') return true;
+    if (mode === 'unequal') return Math.abs(remaining) < 0.005 && selectedArr.length > 0;
+    if (mode === 'shares') return selectedArr.length > 0;
+    return false;
+  })();
+
+  // Esc to close
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const submit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setErr(null);
+    const c = StDB.conn as any;
+    if (!c) { setErr('Not connected.'); return; }
+
+    const splitsArr = buildSplitsArr();
+    const splitsJson = JSON.stringify(splitsArr);
+
+    setLoading(true);
+    try {
+      if (isEdit && editExpense) {
+        await c.reducers.updateExpense({
+          expenseId: editExpense.id,
+          amount: totalAmt,
+          description: desc.trim(),
+          splits: splitsJson,
+        });
+        toast.success('Expense updated');
+      } else {
+        const expenseId = `exp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        await c.reducers.addExpense({
+          expenseId,
+          tripId,
+          amount: totalAmt,
+          description: desc.trim(),
+          splits: splitsJson,
+        });
+        toast.success(`Added ${INR(totalAmt)}`);
+      }
+      onClose();
+    } catch (e: any) {
+      const msg = e?.message ?? 'Failed to save expense';
+      setErr(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [canSubmit, desc, totalAmt, mode, selectedArr, isEdit, editExpense, tripId, onClose]);
+
+  const toggleMember = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) { if (next.size > 1) next.delete(id); }
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const modes: { key: SplitMode; label: string }[] = [
+    { key: 'equally', label: 'Equally' },
+    { key: 'unequal', label: 'Unequal' },
+    { key: 'shares', label: 'Shares' },
+    { key: 'personal', label: 'Personal' },
+  ];
+
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 300,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
-        pointerEvents: 'all',
-      }}
-    >
-      {/* Clickable backdrop - separate element so the form is never affected */}
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 300,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
+      pointerEvents: 'all',
+    }}>
+      {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.16 }}
-        onClick={onClose}
-        style={{
-          position: 'absolute', inset: 0,
-          background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(16px)',
-        }}
+        transition={{ duration: 0.16 }} onClick={onClose}
+        style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(16px)' }}
       />
+
       <motion.form
         initial={{ opacity: 0, scale: 0.95, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -126,61 +234,138 @@ export const ExpenseModal = ({ tripId, tripName, onClose }: Props) => {
         onClick={e => e.stopPropagation()} onSubmit={submit}
         style={{
           position: 'relative', zIndex: 1, pointerEvents: 'all',
-          width: '100%', maxWidth: '440px',
-          background: 'rgba(14,18,16,0.97)',
+          width: '100%', maxWidth: '480px',
+          background: 'rgba(12,16,14,0.98)',
           border: '1px solid rgba(156,174,169,0.18)',
           borderRadius: '20px', padding: '32px',
-          display: 'flex', flexDirection: 'column', gap: '24px',
-          boxShadow: '0 32px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(156,174,169,0.05)',
+          display: 'flex', flexDirection: 'column', gap: '20px',
+          boxShadow: '0 32px 80px rgba(0,0,0,0.9)',
+          maxHeight: '90vh', overflowY: 'auto',
         }}
       >
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#f8f9fa' }}>Manage Expenses</h2>
-          <p style={{ margin: '4px 0 0', color: '#8e8e93', fontSize: '0.85rem' }}>{tripName}</p>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#f8f9fa' }}>
+              {isEdit ? 'Edit Expense' : 'Add Expense'}
+            </h2>
+            <p style={{ margin: '4px 0 0', color: '#8e8e93', fontSize: '0.82rem' }}>{tripName}</p>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: '1.3rem', padding: '0 0 0 16px', lineHeight: 1 }}>×</button>
         </div>
 
-        {/* Group / Personal Toggle */}
-        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '12px', padding: '4px', gap: '4px' }}>
-          {(['group', 'personal'] as const).map(opt => (
-            <button key={opt} type="button" onClick={() => setExpenseType(opt)}
-              style={{
-                flex: 1, padding: '8px 12px', borderRadius: '8px', border: 'none',
-                cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-                fontFamily: 'inherit', textTransform: 'capitalize',
-                transition: 'background 200ms ease, color 200ms ease',
-                background: expenseType === opt ? 'rgba(156,174,169,0.15)' : 'transparent',
-                color: expenseType === opt ? '#9bafa4' : '#8e8e93',
-              }}>
-              {opt === 'group' ? 'Group Split' : 'Personal'}
+        {/* Split mode tabs */}
+        <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '3px', gap: '2px' }}>
+          {modes.map(({ key, label }) => (
+            <button key={key} type="button" onClick={() => setMode(key)} style={{
+              flex: 1, padding: '7px 8px', borderRadius: '7px', border: 'none',
+              cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', fontFamily: 'inherit',
+              transition: 'background 180ms ease, color 180ms ease',
+              background: mode === key ? 'rgba(156,174,169,0.18)' : 'transparent',
+              color: mode === key ? '#9bafa4' : '#666',
+            }}>
+              {label}
             </button>
           ))}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <label htmlFor={`${uid}-d`} style={{ display: 'block', fontSize: '0.8rem', color: '#8e8e93', marginBottom: '8px', fontWeight: 500 }}>Description</label>
-            <input id={`${uid}-d`} value={desc} onChange={e => setDesc(e.target.value)}
-              placeholder="Dinner, Airbnb, taxi…" style={INPUT} autoFocus />
-          </div>
-          <div>
-            <label htmlFor={`${uid}-a`} style={{ display: 'block', fontSize: '0.8rem', color: '#8e8e93', marginBottom: '8px', fontWeight: 500 }}>Amount ($)</label>
-            <input id={`${uid}-a`} type="number" min="0.01" step="0.01" value={amt}
-              onChange={e => setAmt(e.target.value)} placeholder="0.00" style={INPUT} />
-          </div>
+        {/* Description */}
+        <div>
+          <label htmlFor={`${uid}-d`} style={{ display: 'block', fontSize: '0.75rem', color: '#8e8e93', marginBottom: '6px', fontWeight: 600 }}>Description</label>
+          <input id={`${uid}-d`} value={desc} onChange={e => setDesc(e.target.value)}
+            placeholder="Airbnb, dinner, taxi…" style={S.input} autoFocus />
         </div>
 
-        {expenseType === 'group' && (
-          <p style={{ margin: 0, fontSize: '0.8rem', color: '#9bafa4', background: 'rgba(156,174,169,0.08)', padding: '12px 14px', borderRadius: '10px', lineHeight: 1.4 }}>
-            Amount will be split equally among all current trip members.
+        {/* Amount */}
+        <div>
+          <label htmlFor={`${uid}-a`} style={{ display: 'block', fontSize: '0.75rem', color: '#8e8e93', marginBottom: '6px', fontWeight: 600 }}>Amount (₹)</label>
+          <input id={`${uid}-a`} type="number" min="0.01" step="0.01" value={amt}
+            onChange={e => setAmt(e.target.value)} placeholder="0.00" style={S.input} />
+        </div>
+
+        {/* Participants (show unless personal) */}
+        {mode !== 'personal' && tripMembers.length > 0 && (
+          <div>
+            <div style={{ fontSize: '0.75rem', color: '#8e8e93', marginBottom: '8px', fontWeight: 600 }}>Participants</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {tripMembers.map(m => (
+                <button key={m.id} type="button" onClick={() => toggleMember(m.id)} style={{
+                  padding: '5px 12px', borderRadius: '20px', border: '1px solid',
+                  borderColor: selected.has(m.id) ? '#9bafa4' : 'rgba(255,255,255,0.1)',
+                  background: selected.has(m.id) ? 'rgba(156,174,169,0.15)' : 'transparent',
+                  color: selected.has(m.id) ? '#9bafa4' : '#666',
+                  fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'all 150ms ease',
+                }}>
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Unequal inputs */}
+        {mode === 'unequal' && selectedArr.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {selectedArr.map(m => (
+              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ flex: 1, fontSize: '0.88rem', color: '#c8d8d4', fontWeight: 500 }}>{m.name}</span>
+                <input type="number" min="0" step="0.01"
+                  value={unequalAmts[m.id] ?? ''}
+                  onChange={e => setUnequalAmts(prev => ({ ...prev, [m.id]: e.target.value }))}
+                  placeholder="0.00"
+                  style={{ ...S.input, width: '110px', textAlign: 'right' }} />
+              </div>
+            ))}
+            <div style={{
+              textAlign: 'right', fontSize: '0.8rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+              color: Math.abs(remaining) < 0.005 ? '#6fba8a' : '#d98a6c',
+            }}>
+              {Math.abs(remaining) < 0.005 ? '✓ Balanced' : `${remaining > 0 ? '+' : ''}${INR(remaining)} remaining`}
+            </div>
+          </div>
+        )}
+
+        {/* Shares inputs */}
+        {mode === 'shares' && selectedArr.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {selectedArr.map(m => (
+              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ flex: 1, fontSize: '0.88rem', color: '#c8d8d4', fontWeight: 500 }}>{m.name}</span>
+                <div style={{ fontSize: '0.8rem', color: '#8e8e93', width: '70px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {totalAmt > 0 ? INR(shareAmounts[m.id] ?? 0) : ''}
+                </div>
+                <input type="number" min="1" step="1"
+                  value={shares[m.id] ?? '1'}
+                  onChange={e => setShares(prev => ({ ...prev, [m.id]: e.target.value }))}
+                  style={{ ...S.input, width: '64px', textAlign: 'center' }} />
+                <span style={{ color: '#555', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>share{parseInt(shares[m.id] || '1') !== 1 ? 's' : ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Equally info */}
+        {mode === 'equally' && selectedArr.length > 0 && totalAmt > 0 && (
+          <p style={{ margin: 0, fontSize: '0.8rem', color: '#9bafa4', background: 'rgba(156,174,169,0.07)', padding: '10px 12px', borderRadius: '8px' }}>
+            {INR(totalAmt / selectedArr.length)} each across {selectedArr.length} participant{selectedArr.length !== 1 ? 's' : ''}
+          </p>
+        )}
+
+        {/* Personal info */}
+        {mode === 'personal' && (
+          <p style={{ margin: 0, fontSize: '0.8rem', color: '#8e8e93', background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '8px' }}>
+            Tracked for you only — not split with anyone.
           </p>
         )}
 
         {err && <p style={{ margin: 0, color: '#d98a6c', fontSize: '0.85rem', fontWeight: 600 }}>⚠ {err}</p>}
 
-        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-          <button type="button" onClick={onClose} style={BTN_GHOST}>Cancel</button>
-          <button type="submit" disabled={loading} style={{ ...BTN_PRIMARY, flex: 1 }}>
-            {loading ? <Spinner /> : 'Add Expense'}
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+          <button type="button" onClick={onClose} style={S.btnGhost}>Cancel</button>
+          <button type="submit" disabled={loading || !canSubmit} style={{ ...S.btnPrimary, flex: 1, opacity: (loading || !canSubmit) ? 0.5 : 1 }}>
+            {loading ? <Spinner /> : isEdit ? 'Save Changes' : 'Add Expense'}
           </button>
         </div>
       </motion.form>

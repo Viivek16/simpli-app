@@ -37,9 +37,11 @@ import {
 import AddExpenseReducer from "./add_expense_reducer";
 import CreateTripReducer from "./create_trip_reducer";
 import CreateUserReducer from "./create_user_reducer";
+import DeleteExpenseReducer from "./delete_expense_reducer";
+import DeleteTripReducer from "./delete_trip_reducer";
 import JoinTripReducer from "./join_trip_reducer";
-import SeedDemoReducer from "./seed_demo_reducer";
 import SettleDebtReducer from "./settle_debt_reducer";
+import UpdateExpenseReducer from "./update_expense_reducer";
 
 // Import all procedure arg schemas
 
@@ -123,9 +125,11 @@ const reducersSchema = __reducers(
   __reducerSchema("add_expense", AddExpenseReducer),
   __reducerSchema("create_trip", CreateTripReducer),
   __reducerSchema("create_user", CreateUserReducer),
+  __reducerSchema("delete_expense", DeleteExpenseReducer),
+  __reducerSchema("delete_trip", DeleteTripReducer),
   __reducerSchema("join_trip", JoinTripReducer),
-  __reducerSchema("seed_demo", SeedDemoReducer),
   __reducerSchema("settle_debt", SettleDebtReducer),
+  __reducerSchema("update_expense", UpdateExpenseReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
