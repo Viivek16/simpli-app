@@ -158,17 +158,14 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
   }, []);
 
   // B1: Smooth Fly-in & Living Constellation (drift/bob)
-  useFrame(({ clock }) => {
+  useFrame((_, delta) => {
     if (!ref.current || _settling) return;
-    const t = clock.getElapsedTime();
-    // Global drift
-    ref.current.rotation.y = Math.sin(t * 0.15) * 0.04;
-    ref.current.rotation.x = Math.sin(t * 0.2) * 0.02;
-    // Local star bob
-    ref.current.children.forEach((child, i) => {
+    ref.current.rotation.y += delta * 0.06;            // continuous slow orbit
+    const t = performance.now() / 1000;
+    ref.current.children.forEach((child) => {
       if (child.name === 'star-group') {
-        const offset = Math.sin(t * 1.2 + i * 2.1) * 0.12;
-        child.position.y = nodes[i].position.y + offset;
+        const baseY = child.userData.baseY;
+        if (typeof baseY === 'number') child.position.y = baseY + Math.sin(t * 0.9 + child.userData.seed) * 0.25;
       }
     });
   });
@@ -201,7 +198,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
   return (
     <group ref={ref} onClick={(e) => { if (e.object.type !== 'Mesh' && selectedMemberId) onStarClick(null); }}>
       {/* Stars */}
-      {nodes.map((node) => {
+      {nodes.map((node, i) => {
         const isLocal = node.id === localId;
         const settled = Math.abs(node.netDebt) < 0.5;
         const ratio = Math.min(Math.abs(node.netDebt) / maxNetDebt, 1);
@@ -218,13 +215,19 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
         const pairNet = theirPairDebt - myPairDebt; // > 0 means they owe me
 
         return (
-          <group key={node.id} position={node.position} name="star-group">
-            {/* Core star sphere */}
+          <group key={node.id} position={node.position} name="star-group" userData={{ baseY: node.position.y, seed: i * 2.1 }}>
+            {/* Invisible hit target for clicks */}
             <mesh
-              onClick={() => onStarClick(node.id)}
-              onPointerOver={() => onStarHover(node.id)}
+              onClick={(e) => { e.stopPropagation(); onStarClick(node.id); }}
+              onPointerOver={(e) => { e.stopPropagation(); onStarHover(node.id); }}
               onPointerOut={() => onStarHover(null)}
             >
+              <sphereGeometry args={[1.1, 16, 16]} />
+              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            </mesh>
+
+            {/* Core star sphere */}
+            <mesh>
               <sphereGeometry args={[0.42, 32, 32]} />
               <meshStandardMaterial
                 color={coreColor}
@@ -240,7 +243,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
             {!settled && (
               <group>
                 {/* Inner bright halo */}
-                <sprite scale={[1.8 + ratio * 2.2, 1.8 + ratio * 2.2, 1]}>
+                <sprite raycast={() => null} scale={[1.8 + ratio * 2.2, 1.8 + ratio * 2.2, 1]}>
                   <spriteMaterial
                     map={haloTexture}
                     color={color}
@@ -249,7 +252,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
                   />
                 </sprite>
                 {/* Outer soft halo */}
-                <sprite scale={[3.0 + ratio * 3.5, 3.0 + ratio * 3.5, 1]}>
+                <sprite raycast={() => null} scale={[3.0 + ratio * 3.5, 3.0 + ratio * 3.5, 1]}>
                   <spriteMaterial
                     map={haloTexture}
                     color={color}
@@ -267,7 +270,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
 
             {/* Settled planet ring */}
             {settled && (
-              <mesh rotation={[Math.PI / 2.3, 0, 0]}>
+              <mesh raycast={() => null} rotation={[Math.PI / 2.3, 0, 0]}>
                 <torusGeometry args={[0.7, 0.025, 12, 48]} />
                 <meshBasicMaterial color="#6b7280" transparent opacity={0.55} toneMapped={false} />
               </mesh>

@@ -46,25 +46,26 @@ const BTN_GHOST: React.CSSProperties = {
 };
 
 // ─── Relative time ────────────────────────────────────────────────────────────
-const relTime = (ts: any): string => {
+const toDate = (ts: any): Date | null => {
   try {
-    let ms = 0;
-    if (typeof ts === 'object' && ts && 'microsSinceEpoch' in ts) {
-      ms = Number(ts.microsSinceEpoch) / 1000;
-    } else if (typeof ts === 'bigint') {
-      ms = Number(ts) / 1000;
-    } else if (typeof ts === 'number') {
-      ms = ts > 2000000000000 ? ts / 1000 : ts;
-    } else {
-      ms = Date.parse(ts);
-    }
-    if (isNaN(ms) || ms === 0) return '';
-    const diffMs = Date.now() - ms;
-    if (diffMs < 60_000) return 'just now';
-    if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
-    if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h ago`;
-    return `${Math.floor(diffMs / 86_400_000)}d ago`;
-  } catch { return ''; }
+    if (!ts) return null;
+    if (typeof ts.toDate === 'function') return ts.toDate();            // SDK Timestamp
+    const micros = ts.microsSinceUnixEpoch ?? ts.__timestamp_micros_since_unix_epoch__ ?? ts.microsSinceEpoch;
+    if (micros != null) return new Date(Number(micros) / 1000);
+    if (typeof ts === 'bigint') return new Date(Number(ts) / 1000);
+    if (typeof ts === 'number') return new Date(ts > 2e12 ? ts / 1000 : ts);
+    const p = Date.parse(ts); return isNaN(p) ? null : new Date(p);
+  } catch { return null; }
+};
+
+const relTime = (ts: any): string => {
+  const d = toDate(ts);
+  if (!d) return 'just now';
+  const diffMs = Date.now() - d.getTime();
+  if (diffMs < 60_000) return 'just now';
+  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
+  if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)}h ago`;
+  return `${Math.floor(diffMs / 86_400_000)}d ago`;
 };
 
 // ─── Trip Room ─────────────────────────────────────────────────────────────────
@@ -191,21 +192,8 @@ const TripRoom = ({
   const grouped = useMemo(() => {
     const groups: { label: string; items: typeof tripExpenses }[] = [];
     const dayOf = (ts: any) => {
-      try {
-        let ms = 0;
-        if (typeof ts === 'object' && ts && 'microsSinceEpoch' in ts) {
-          // Sometimes it comes as a string or BigInt, convert safely
-          ms = Number(ts.microsSinceEpoch) / 1000;
-        } else if (typeof ts === 'bigint') {
-          ms = Number(ts) / 1000;
-        } else if (typeof ts === 'number') {
-          ms = ts > 2000000000000 ? ts / 1000 : ts;
-        } else {
-          ms = Date.parse(ts);
-        }
-        if (isNaN(ms) || ms === 0) return 'Unknown';
-        return new Date(ms).toDateString();
-      } catch { return 'Unknown'; }
+      const d = toDate(ts);
+      return d ? d.toDateString() : 'Recent';
     };
     const dayLabel = (d: string) => {
       const today = new Date().toDateString();
@@ -279,30 +267,17 @@ const TripRoom = ({
         padding: '16px 24px',
         background: 'linear-gradient(to bottom, rgba(2,5,8,0.92) 0%, rgba(2,5,8,0) 100%)',
       }}>
-        {/* Wordmark Lockup */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0px' }}>
-          <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1 }}>SIMPLI</span>
-          <span style={{ fontSize: '0.62rem', fontWeight: 500, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif' }}>Built on SpacetimeDB</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '0px' }}>
+          <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1, letterSpacing: '0.02em', textAlign: 'center' }}>SIMPLI</span>
+          <span style={{ fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif', textAlign: 'center', marginTop: '2px' }}>BUILT ON SPACETIMEDB</span>
         </div>
 
         <div style={{ flex: 1 }} />
 
-        {/* Global Audio Toggle */}
-        <button
-          onClick={() => AudioService.setEnabled(!AudioService.enabled)}
-          style={{ ...BTN_GHOST, padding: '8px', color: 'var(--text-dim)' }}
-          title="Toggle Audio"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-          </svg>
-        </button>
-
         {/* Galaxy Chip (Back to Cosmos) */}
         <button onClick={onBack} className="btn-ghost" style={{ 
           padding: '8px 16px 8px 12px', fontWeight: 600, color: 'var(--text)', 
-          background: 'var(--glass)', border: '1px solid var(--glass-brd)', borderRadius: '999px',
+          background: 'var(--glass)', border: '1px solid var(--glass-brd)', borderRadius: '12px',
           display: 'flex', alignItems: 'center', gap: '8px',
           transition: 'background 0.2s', fontSize: '0.9rem'
         }}
@@ -334,25 +309,24 @@ const TripRoom = ({
         display: 'flex', alignItems: 'center', gap: '16px', zIndex: 20
       }}>
         <button onClick={copyInvite} className="btn-secondary" style={{ 
-          color: 'var(--text)', padding: '0 20px', 
-          display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '14px', height: '44px',
-          fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
-          transition: 'background 0.2s'
+          color: '#ffffff', padding: '0 20px', background: 'rgba(5, 6, 10, 0.85)',
+          display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', height: '48px',
+          fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+          border: '1px solid var(--glass-brd)', transition: 'background 0.2s', minWidth: '150px', justifyContent: 'center'
         }}
         title="Invite">
-           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
+           <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="var(--owed)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
            {copied ? 'Copied' : 'Invite'}
         </button>
 
-        <button onClick={() => { setEditPayload(null); setShowModal(true); }} className="btn-primary" style={{ 
-          color: '#ffffff', padding: '0 20px', 
-          display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '14px', height: '44px',
-          fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer',
-          boxShadow: '0 0 24px rgba(255, 183, 77, 0.4), inset 0 0 12px rgba(255,255,255,0.2)',
-          border: '1px solid rgba(255, 183, 77, 0.5)'
+        <button onClick={() => { setEditPayload(null); setShowModal(true); }} className="btn-secondary" style={{ 
+          color: '#ffffff', padding: '0 20px', background: 'rgba(5, 6, 10, 0.85)',
+          display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '12px', height: '48px',
+          fontWeight: 600, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+          border: '1px solid var(--glass-brd)', transition: 'background 0.2s', minWidth: '150px', justifyContent: 'center'
         }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-          Add expense
+          <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="var(--owed)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <span style={{ fontWeight: 600 }}>Add expense</span>
         </button>
       </div>
 
@@ -360,12 +334,12 @@ const TripRoom = ({
       <div className="glass-panel" style={{
         pointerEvents: 'all', position: 'absolute', top: 72, right: 20, bottom: 24,
         width: '340px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        background: 'rgba(5, 6, 10, 0.65)'
+        background: 'rgba(5, 6, 10, 0.65)', borderRadius: '18px'
       }}>
         <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Your Balance</div>
-          <div className="money" style={{ fontSize: '1.6rem', fontWeight: 700, color: myBalance === 0 ? 'var(--text)' : myBalance > 0 ? 'var(--owed)' : 'var(--owe)' }}>
-            {myBalance === 0 ? 'Settled up' : (myBalance > 0 ? '+' : '−') + INR(Math.abs(myBalance))}
+          <div className="money" style={{ fontSize: '1.2rem', fontWeight: 600, color: myBalance === 0 ? 'var(--text-dim)' : myBalance > 0 ? 'var(--owed)' : 'var(--owe)' }}>
+            {myBalance === 0 ? 'Settled up' : (myBalance > 0 ? `You're owed ${INR(Math.abs(myBalance))}` : `You owe ${INR(Math.abs(myBalance))}`)}
           </div>
         </div>
 
@@ -575,26 +549,14 @@ const Dashboard = ({
         position: 'absolute', top: 0, left: 0, right: 0, pointerEvents: 'all',
         display: 'flex', alignItems: 'center', gap: '24px', padding: '20px 28px',
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0px' }}>
-          <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1 }}>SIMPLI</span>
-          <span style={{ fontSize: '0.62rem', fontWeight: 500, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif' }}>Built on SpacetimeDB</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '0px' }}>
+          <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1, letterSpacing: '0.02em', textAlign: 'center' }}>SIMPLI</span>
+          <span style={{ fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif', textAlign: 'center', marginTop: '2px' }}>BUILT ON SPACETIMEDB</span>
         </div>
         <div style={{ flex: 1 }} />
         
-        {/* Global Audio Toggle */}
-        <button
-          onClick={() => AudioService.setEnabled(!AudioService.enabled)}
-          style={{ ...BTN_GHOST, padding: '8px', color: 'var(--text-dim)' }}
-          title="Toggle Audio"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-          </svg>
-        </button>
-
         <img src={profile.picture} alt="" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)' }} />
-        <button onClick={onLogout} className="btn-secondary" style={{ height: '34px', borderRadius: '999px', fontSize: '0.82rem' }}>Logout</button>
+        <button onClick={onLogout} className="btn-secondary" style={{ height: '34px', borderRadius: '12px', fontSize: '0.82rem' }}>Logout</button>
       </div>
 
       {/* Empty State */}
@@ -618,28 +580,33 @@ const Dashboard = ({
       }}>
         {/* Soft outer glow */}
         <div style={{
-          position: 'absolute', inset: '0 16px', borderRadius: '999px',
+          position: 'absolute', inset: '0 16px', borderRadius: '12px',
           background: 'radial-gradient(circle at 50% 50%, rgba(255,183,77,0.12) 0%, rgba(94,230,255,0.06) 50%, transparent 100%)',
           filter: 'blur(16px)', zIndex: -1, pointerEvents: 'none'
         }} />
-        <form onSubmit={handleCreate} className="glass-pill" style={{ 
-          display: 'flex', gap: '8px', padding: '8px',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.14), inset 0 0 0 1px rgba(255,255,255,0.04)'
+        <form onSubmit={handleCreate} style={{ 
+          display: 'flex', gap: '10px'
         }}>
-          <input
-            value={newTripName} onChange={e => setNewTripName(e.target.value)}
-            placeholder="Create a new group / galaxy…"
-            style={{
-              flex: 1, background: 'transparent', border: 'none', padding: '12px 18px', color: 'var(--text)',
-              fontSize: '1rem', outline: 'none', fontFamily: 'inherit'
-            }}
-          />
+          <div style={{
+            flex: 1, position: 'relative', display: 'flex', background: 'rgba(5, 6, 10, 0.65)',
+            border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px',
+            boxShadow: '0 0 24px rgba(255, 183, 77, 0.15)',
+          }}>
+            <input
+              value={newTripName} onChange={e => setNewTripName(e.target.value)}
+              placeholder="Create a new group / galaxy..."
+              style={{
+                width: '100%', background: 'transparent', border: 'none', padding: '0 18px', color: 'var(--text)',
+                fontSize: '0.95rem', outline: 'none', fontFamily: 'inherit', height: '48px', borderRadius: '12px'
+              }}
+            />
+          </div>
           <button type="submit" disabled={!newTripName.trim() || creating || !isConnected} className="btn-primary" style={{
-            borderRadius: '999px',
-            padding: '0 24px', fontWeight: 700,
+            borderRadius: '12px', height: '48px',
+            padding: '0 24px', fontWeight: 700, fontSize: '0.95rem',
             opacity: newTripName.trim() && !creating && isConnected ? 1 : 0.4,
           }}>
-            {creating ? '…' : 'Create'}
+            {creating ? '...' : 'Create'}
           </button>
         </form>
       </div>

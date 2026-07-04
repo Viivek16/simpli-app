@@ -141,19 +141,19 @@ const SwirlingGalaxy = ({
     ref.current.rotation.y += hovered || selected ? 0.002 : 0.0004;
     // settled groups are smaller
     const targetScale = selected ? 1.4 : (hovered ? 1.06 : (settled ? 0.8 : 1.0));
-    const targetOpacity = hidden ? 0 : (selected ? 0.0 : (settled ? 0.45 : 0.85));
+    const targetOpacity = hidden ? 0 : (selected ? 0.0 : (settled ? 0.35 : 0.6));
     
     if (e < 1) {
       const s = 0.96 + e * (targetScale - 0.96);
       ref.current.scale.set(s, s, s);
       mat.opacity = e * targetOpacity;
-      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * 0.8;
-      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.4;
+      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * 0.35;
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.15;
     } else {
       ref.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.04);
       mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
-      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * 0.8;
-      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.4;
+      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * 0.35;
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * 0.15;
     }
   });
 
@@ -168,14 +168,14 @@ const SwirlingGalaxy = ({
         >
           <PointMaterial
             transparent vertexColors
-            size={0.22}
+            size={0.12}
             sizeAttenuation depthWrite={false}
             opacity={0}
             blending={THREE.AdditiveBlending} toneMapped={false}
           />
         </Points>
         {/* Core Glow */}
-        <sprite ref={spriteRef1} scale={[18, 18, 1]} position={[0, 0, 0]}>
+        <sprite ref={spriteRef1} scale={[11, 11, 1]} position={[0, 0, 0]}>
           <spriteMaterial map={sharedGlowTex} color={coreColor} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
         </sprite>
         {/* Nebula Haze */}
@@ -244,19 +244,20 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
       p[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       p[i * 3 + 2] = r * Math.cos(phi);
       
-      const v = 0.3 + Math.random() * 0.4 + (layer === 0 ? 0.2 : 0);
+      const v = 0.5 + Math.random() * 0.5 + (layer === 0 ? 0.3 : 0);
       c[i * 3] = v; c[i * 3 + 1] = v; 
       c[i * 3 + 2] = v + (Math.random() < 0.2 ? 0.2 : 0);
     }
     return { positions: p, colors: c };
   }, []);
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!ref.current) return;
     const mat = ref.current.material as THREE.PointsMaterial;
-    const targetOpacity = activeTripId ? 0 : 0.6;
+    const targetOpacity = activeTripId ? 0 : 0.85;
     mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
-    ref.current.rotation.y += 0.0001; // subtle depth rotation
+    ref.current.rotation.y += delta * 0.005; // slow global drift
+
   });
 
   if (activeTripId && settled) return null;
@@ -415,7 +416,7 @@ const GalaxyScene = ({
       </ErrorBoundary>
 
       <EffectComposer>
-        <Bloom luminanceThreshold={0.12} mipmapBlur luminanceSmoothing={0.9} intensity={1.15} />
+        <Bloom luminanceThreshold={0.2} mipmapBlur luminanceSmoothing={0.9} intensity={0.7} />
       </EffectComposer>
     </>
   );

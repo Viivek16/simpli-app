@@ -21,7 +21,7 @@ const S: Record<string, React.CSSProperties> = {
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 
-type SplitMode = 'equally' | 'unequal' | 'shares' | 'personal';
+type SplitMode = 'equally' | 'unequal' | 'personal';
 
 interface MemberRow { id: string; name: string; }
 interface Props {
@@ -78,34 +78,12 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
     return {};
   });
 
-  // Per-member shares
-  const [shares, setShares] = useState<Record<string, string>>(() => {
-    const obj: Record<string, string> = {};
-    tripMembers.forEach(m => { obj[m.id] = '1'; });
-    return obj;
-  });
-
   const totalAmt = parseFloat(amt) || 0;
   const selectedArr = tripMembers.filter(m => selected.has(m.id));
 
   // Live "remaining" for unequal
   const unequalSum = selectedArr.reduce((s, m) => s + (parseFloat(unequalAmts[m.id] || '0') || 0), 0);
   const remaining = Math.round((totalAmt - unequalSum) * 100) / 100;
-
-  // Computed amounts for shares mode
-  const totalShares = selectedArr.reduce((s, m) => s + (parseInt(shares[m.id] || '1') || 1), 0);
-  const shareAmounts: Record<string, number> = {};
-  if (mode === 'shares' && selectedArr.length > 0) {
-    let accum = 0;
-    selectedArr.forEach((m, i) => {
-      const s = parseInt(shares[m.id] || '1') || 1;
-      const a = i === selectedArr.length - 1
-        ? Math.round((totalAmt - accum) * 100) / 100
-        : Math.round((totalAmt * s / totalShares) * 100) / 100;
-      shareAmounts[m.id] = a;
-      accum += a;
-    });
-  }
 
   const buildSplitsArr = (): { debtor_id: string; amount_owed: number }[] => {
     if (mode === 'personal') return [];
@@ -123,9 +101,6 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
         amount_owed: Math.round((parseFloat(unequalAmts[m.id] || '0') || 0) * 100) / 100,
       }));
     }
-    if (mode === 'shares') {
-      return selectedArr.map(m => ({ debtor_id: m.id, amount_owed: shareAmounts[m.id] || 0 }));
-    }
     return [];
   };
 
@@ -133,7 +108,6 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
     if (!desc.trim() || !totalAmt || totalAmt <= 0) return false;
     if (mode === 'equally' || mode === 'personal') return true;
     if (mode === 'unequal') return Math.abs(remaining) < 0.005 && selectedArr.length > 0;
-    if (mode === 'shares') return selectedArr.length > 0;
     return false;
   })();
 
@@ -197,14 +171,13 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
   const modes: { key: SplitMode; label: string }[] = [
     { key: 'equally', label: 'Equally' },
     { key: 'unequal', label: 'Unequal' },
-    { key: 'shares', label: 'Shares' },
     { key: 'personal', label: 'Personal' },
   ];
 
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 300,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: '24px',
       pointerEvents: 'all',
     }}>
       <motion.div
@@ -223,7 +196,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
         style={{
           position: 'relative', width: '100%', maxWidth: '520px',
           maxHeight: '85vh', overflowY: 'auto',
-          borderRadius: '26px', padding: '24px', margin: '16px',
+          borderRadius: '18px', padding: '24px', margin: '0 16px',
           display: 'flex', flexDirection: 'column', gap: '20px',
           background: 'rgba(10, 12, 16, 0.95)',
           boxShadow: '0 32px 64px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px rgba(255,255,255,0.05)',
@@ -317,24 +290,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
           </div>
         )}
 
-        {/* Shares inputs */}
-        {mode === 'shares' && selectedArr.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {selectedArr.map(m => (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ flex: 1, fontSize: '0.9rem', color: 'var(--text)', fontWeight: 500 }}>{m.id === localId ? 'You' : m.name}</span>
-                <div className="money" style={{ fontSize: '0.85rem', color: 'var(--text-dim)', width: '80px', textAlign: 'right' }}>
-                  {totalAmt > 0 ? INR(shareAmounts[m.id] ?? 0) : ''}
-                </div>
-                <input type="number" min="1" step="1"
-                  value={shares[m.id] ?? '1'}
-                  onChange={e => setShares(prev => ({ ...prev, [m.id]: e.target.value }))}
-                  style={{ ...S.input, width: '70px', textAlign: 'center' }} />
-                <span style={{ color: 'var(--text-dim)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>share{parseInt(shares[m.id] || '1') !== 1 ? 's' : ''}</span>
-              </div>
-            ))}
-          </div>
-        )}
+
 
         {/* Equally info */}
         {mode === 'equally' && selectedArr.length > 0 && totalAmt > 0 && (
@@ -354,8 +310,8 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-          <button type="button" onClick={onClose} className="btn-secondary" style={{ flex: 1, height: '48px', fontSize: '0.95rem' }}>Cancel</button>
-          <button type="submit" disabled={loading || !canSubmit} className="btn-primary" style={{ flex: 1, height: '48px', fontSize: '0.95rem', opacity: (loading || !canSubmit) ? 0.5 : 1 }}>
+          <button type="button" onClick={onClose} className="btn-secondary" style={{ flex: 1, height: '44px', borderRadius: '12px', fontSize: '0.95rem' }}>Cancel</button>
+          <button type="submit" disabled={loading || !canSubmit} className="btn-primary" style={{ flex: 1, height: '44px', borderRadius: '12px', fontSize: '0.95rem', opacity: (loading || !canSubmit) ? 0.5 : 1, background: '#FFB74D', color: '#ffffff', boxShadow: '0 0 24px rgba(255, 183, 77, 0.4)' }}>
             {loading ? <Spinner /> : isEdit ? 'Save Changes' : 'Add Expense'}
           </button>
         </div>
