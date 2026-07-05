@@ -547,8 +547,9 @@ const TripRoom = ({
             className="glass-panel insights-panel"
             style={{
               pointerEvents: 'all', position: 'absolute', top: 72, bottom: 24,
+              right: 376, width: 340,
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
-              background: 'rgba(5, 6, 10, 0.85)', borderRadius: '18px', zIndex: 19
+              background: 'rgba(5, 6, 10, 0.65)', borderRadius: '18px', zIndex: 19
             }}
           >
             <div style={{ padding: '20px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -772,7 +773,7 @@ const Dashboard = ({
     const name = newTripName.trim();
     if (!name || creating) return;
     const c = StDB.conn as any;
-    if (!c) { toast.error('Not connected — try again in a moment.'); return; }
+    if (!c) { toast.error('Not connected. Try again in a moment.'); return; }
     setCreating(true);
     try {
       const tripId = `trip-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;

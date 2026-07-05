@@ -31,6 +31,47 @@ const identityStr = (u: any): string => {
   return norm(u.id);
 };
 
+const AtmosphereShell = ({ color, strength, radius = 0.62 }: { color: string; strength: number; radius?: number }) => {
+  const mat = useMemo(() => new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(color) },
+      uPower: { value: 2.4 },
+      uStrength: { value: strength },
+    },
+    vertexShader: `
+      varying vec3 vN;
+      varying vec3 vV;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uPower;
+      uniform float uStrength;
+      varying vec3 vN;
+      varying vec3 vV;
+      void main() {
+        float f = pow(1.0 - clamp(dot(vN, vV), 0.0, 1.0), uPower);
+        gl_FragColor = vec4(uColor, f * uStrength);
+      }
+    `,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.BackSide,
+  }), [color, strength]);
+  return (
+    <mesh raycast={() => null}>
+      <sphereGeometry args={[radius, 32, 32]} />
+      <primitive object={mat} attach="material" />
+    </mesh>
+  );
+};
+
 interface LDCProps {
   activeTripId: string;
   hoveredStar: string | null;
@@ -163,6 +204,8 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
       if (child.name === 'star-group') {
         const baseY = child.userData.baseY;
         if (typeof baseY === 'number') child.position.y = baseY + Math.sin(t * 0.9 + child.userData.seed) * 0.25;
+        const s = 1 + Math.sin(t * 0.8 + child.userData.seed) * 0.02;
+        child.scale.setScalar(s);
       }
     });
 
@@ -231,8 +274,10 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
         const color = isLocal ? '#FFB74D' : '#5EE6FF';
 
         // Emissive scales with debt ratio per spec (softer glow)
-        const emissiveIntensity = settled ? 0.2 : (0.8 + ratio * 2.0);
+        const emissiveIntensity = settled ? 0.18 : (0.5 + ratio * 1.1);
         const coreColor = settled ? '#9aa0aa' : color;
+        const shellColor = settled ? '#8b93a3' : color;
+        const shellStrength = settled ? 0.26 : (isLocal ? 0.62 : (0.40 + ratio * 0.45));
 
         const labelColor = settled ? '#6b7280' : node.netDebt < 0 ? '#d98a6c' : '#6fba8a';
         const isSelected = selectedMemberId === node.id;
@@ -262,6 +307,9 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
                 transparent
               />
             </mesh>
+
+            {/* Fresnel atmosphere shell (static, view-dependent limb glow) */}
+            <AtmosphereShell color={shellColor} strength={shellStrength} radius={0.62} />
 
             {/* Layered additive halo sprites */}
             {!settled && (

@@ -44,6 +44,23 @@ const createGlowTexture = () => {
   return tex;
 };
 
+let sharedStarTex: THREE.CanvasTexture | null = null;
+const createStarTexture = () => {
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0.0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.18, 'rgba(255,255,255,0.85)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0.18)');
+  g.addColorStop(1.0, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.needsUpdate = true;
+  return t;
+};
+
 // Stable color palette hashed from trip id (Phase 2.1)
 const PALETTE = [
   { core: '#FFC46B', edge: '#FF7A1A' }, // amber-gold
@@ -78,6 +95,7 @@ const SwirlingGalaxy = ({
   const mountTime = useRef<number | null>(null);
 
   if (!sharedGlowTex) sharedGlowTex = createGlowTexture();
+  if (!sharedStarTex) sharedStarTex = createStarTexture();
 
   const { positions, colors, coreColor, edgeColor } = useMemo(() => {
     const isPhone = typeof window !== 'undefined' && window.innerWidth <= 768;
@@ -110,7 +128,7 @@ const SwirlingGalaxy = ({
       
       const intensity = Math.max(0, 1 - Math.pow(radius / 9, 1.2));
       temp.lerpColors(cEdge, cCore, intensity);
-      if (radius < 2.5) temp.lerp(white, (1 - radius / 2.5) * 0.75);
+      if (radius < 1.4) temp.lerp(white, (1 - radius / 1.4) * 0.22);
       
       c[i * 3] = temp.r; c[i * 3 + 1] = temp.g; c[i * 3 + 2] = temp.b;
     }
@@ -144,19 +162,19 @@ const SwirlingGalaxy = ({
     ref.current.rotation.y += hovered || selected ? 0.002 : 0.0004;
     // settled groups are smaller
     const targetScale = selected ? 1.4 : (hovered ? 1.06 : (settled ? 0.8 : 1.0));
-    const targetOpacity = hidden ? 0 : (selected ? 0.0 : (settled ? 0.35 : 0.6));
+    const targetOpacity = hidden ? 0 : (selected ? 0.0 : (settled ? 0.30 : 0.48));
     
     if (e < 1) {
       const s = 0.96 + e * (targetScale - 0.96);
       ref.current.scale.set(s, s, s);
       mat.opacity = e * targetOpacity;
-      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.16 / Math.max(targetOpacity, 0.001));
-      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.06 / Math.max(targetOpacity, 0.001));
+      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.10 / Math.max(targetOpacity, 0.001));
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.035 / Math.max(targetOpacity, 0.001));
     } else {
       ref.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.04);
       mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
-      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.16 / Math.max(targetOpacity, 0.001));
-      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.06 / Math.max(targetOpacity, 0.001));
+      if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.10 / Math.max(targetOpacity, 0.001));
+      if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.035 / Math.max(targetOpacity, 0.001));
     }
   });
 
@@ -171,18 +189,19 @@ const SwirlingGalaxy = ({
         >
           <PointMaterial
             transparent vertexColors
-            size={0.138}
+            map={sharedStarTex}
+            size={0.11}
             sizeAttenuation depthWrite={false}
             opacity={0}
             blending={THREE.AdditiveBlending} toneMapped={false}
           />
         </Points>
         {/* Core Glow */}
-        <sprite ref={spriteRef1} scale={[3.2, 3.2, 1]} position={[0, 0, 0]}>
+        <sprite ref={spriteRef1} scale={[2.4, 2.4, 1]} position={[0, 0, 0]}>
           <spriteMaterial map={sharedGlowTex} color={coreColor} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
         </sprite>
         {/* Nebula Haze */}
-        <sprite ref={spriteRef2} scale={[9, 9, 1]} position={[0, -0.5, 0]}>
+        <sprite ref={spriteRef2} scale={[6.5, 6.5, 1]} position={[0, -0.5, 0]}>
           <spriteMaterial map={sharedGlowTex} color={edgeColor} transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} />
         </sprite>
       </group>
@@ -418,10 +437,10 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
 
       <EffectComposer>
         <Bloom 
-          luminanceThreshold={0.2} 
+          luminanceThreshold={0.34} 
           mipmapBlur 
           luminanceSmoothing={0.9} 
-          intensity={(typeof window !== 'undefined' && window.innerWidth <= 768) ? 0.45 : 0.55} 
+          intensity={(typeof window !== 'undefined' && window.innerWidth <= 768) ? 0.28 : 0.40} 
         />
       </EffectComposer>
     </>
