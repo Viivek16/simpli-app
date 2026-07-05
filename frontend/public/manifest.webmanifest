@@ -1,0 +1,17 @@
+{
+  "name": "SIMPLI",
+  "short_name": "SIMPLI",
+  "description": "Split expenses in a living cosmos. Every group is a galaxy, every friend is a star.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#020508",
+  "theme_color": "#020508",
+  "categories": ["finance", "productivity", "social"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

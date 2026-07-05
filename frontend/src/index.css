@@ -339,3 +339,9 @@ button:focus-visible, input:focus-visible {
     font-size: clamp(14px, 4vw, 16px);
   }
 }
+
+@media (display-mode: standalone) {
+  .mobile-ledger-btn {
+    bottom: calc(24px + env(safe-area-inset-bottom)) !important;
+  }
+}
