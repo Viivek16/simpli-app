@@ -16,6 +16,7 @@ import { buildOwesMap, pairNet } from './lib/ledger';
 import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground } from './components/GalaxyBackground';
 import { ProfileModal } from './components/ProfileModal';
+import { NotificationsManager } from './components/NotificationsManager';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster, toast } from './components/Toast';
 import { AudioService } from './audio';
@@ -1092,6 +1093,7 @@ function App() {
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100dvh', background: '#020508', overflow: 'hidden' }}>
       <Toaster />
+      {profile && <NotificationsManager />}
 
       <ErrorBoundary fallback={<div style={{ position: 'fixed', inset: 0, background: '#020508' }} />}>
         <GalaxyBackground
