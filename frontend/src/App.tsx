@@ -15,6 +15,7 @@ import { useTripMember } from './hooks/useTrips';
 import { buildOwesMap, pairNet } from './lib/ledger';
 import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground } from './components/GalaxyBackground';
+import { ProfileModal } from './components/ProfileModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster, toast } from './components/Toast';
 import { AudioService } from './audio';
@@ -76,9 +77,9 @@ interface EditPayload {
 }
 
 const TripRoom = ({
-  trip, onBack, profile, onOverlayChange, selectedMemberId, onStarClick, selectedStarPos
+  trip, onBack, profile, onOpenProfile, onOverlayChange, selectedMemberId, onStarClick, selectedStarPos
 }: {
-  trip: Trip; onBack: () => void; profile: GoogleProfile;
+  trip: Trip; onBack: () => void; profile: GoogleProfile; onOpenProfile: () => void;
   onOverlayChange: (v: boolean) => void; selectedMemberId: string | null; onStarClick: (id: string | null) => void;
   selectedStarPos: { x: number, y: number } | null;
 }) => {
@@ -303,9 +304,17 @@ const TripRoom = ({
         padding: '16px 24px',
         background: 'linear-gradient(to bottom, rgba(2,5,8,0.92) 0%, rgba(2,5,8,0) 100%)',
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '0px' }}>
-          <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1, letterSpacing: '0.02em', textAlign: 'center' }}>SIMPLI</span>
-          <span style={{ fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif', textAlign: 'center', marginTop: '2px' }}>BUILT ON SPACETIMEDB</span>
+        <div onClick={onBack} title="Back to cosmos" style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', transition: 'opacity 0.2s' }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}>
+          <svg width="26" height="25" viewBox="0 0 48 46" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
+            <defs><linearGradient id="simpliBoltRoom" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
+            <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltRoom)" />
+          </svg>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0px' }}>
+            <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1, letterSpacing: '0.02em' }}>SIMPLI</span>
+            <span style={{ fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif', marginTop: '2px' }}>BUILT ON SPACETIMEDB</span>
+          </div>
         </div>
 
         <div style={{ flex: 1 }} />
@@ -336,7 +345,7 @@ const TripRoom = ({
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </button>
 
-        <img src={profile.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', marginLeft: '8px' }} />
+        <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', marginLeft: '8px', cursor: 'pointer' }} />
       </div>
 
       {/* Bottom Actions */}
@@ -760,9 +769,9 @@ const TripRoom = ({
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 const Dashboard = ({
-  profile, isConnected, onLogout, onSelectTrip, subReady, trips,
+  profile, isConnected, onOpenProfile, onSelectTrip, subReady, trips,
 }: {
-  profile: GoogleProfile; isConnected: boolean; onLogout: () => void;
+  profile: GoogleProfile; isConnected: boolean; onOpenProfile: () => void;
   onSelectTrip: (t: Trip) => void; subReady: boolean; trips: Trip[];
 }) => {
   const [newTripName, setNewTripName] = useState('');
@@ -778,6 +787,7 @@ const Dashboard = ({
     try {
       const tripId = `trip-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       await c.reducers.createTrip({ tripId, name });
+      try { localStorage.setItem('simpli_trips_created', String((Number(localStorage.getItem('simpli_trips_created')) || 0) + 1)); } catch {}
       setNewTripName('');
       AudioService.playBlip();
       onSelectTrip({ id: tripId, name });
@@ -805,14 +815,19 @@ const Dashboard = ({
         position: 'absolute', top: 0, left: 0, right: 0, pointerEvents: 'all',
         display: 'flex', alignItems: 'center', gap: '24px', padding: '20px 28px',
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '0px' }}>
-          <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1, letterSpacing: '0.02em', textAlign: 'center' }}>SIMPLI</span>
-          <span style={{ fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif', textAlign: 'center', marginTop: '2px' }}>BUILT ON SPACETIMEDB</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <svg width="26" height="25" viewBox="0 0 48 46" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
+            <defs><linearGradient id="simpliBoltHome" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
+            <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltHome)" />
+          </svg>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0px' }}>
+            <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1, letterSpacing: '0.02em' }}>SIMPLI</span>
+            <span style={{ fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif', marginTop: '2px' }}>BUILT ON SPACETIMEDB</span>
+          </div>
         </div>
         <div style={{ flex: 1 }} />
         
-        <img src={profile.picture} alt="" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)' }} />
-        <button onClick={onLogout} className="btn-secondary" style={{ height: '34px', borderRadius: '12px', fontSize: '0.82rem' }}>Logout</button>
+        <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)', cursor: 'pointer' }} />
       </div>
 
       {/* Empty State */}
@@ -970,6 +985,7 @@ function App() {
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [selectedStarPos, setSelectedStarPos] = useState<{ x: number, y: number } | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const isConnected = useIsConnected();
   const trips = useTrip();
 
@@ -1059,6 +1075,12 @@ function App() {
     if (!StDB.conn) sessionStorage.setItem('simpli_pending_login', 'true');
   };
 
+  useEffect(() => {
+    if (profile) {
+      try { if (!localStorage.getItem('simpli_member_since')) localStorage.setItem('simpli_member_since', new Date().toISOString()); } catch {}
+    }
+  }, [profile]);
+
   const handleLogout = () => {
     localStorage.removeItem('simpli_user');
     googleLogout();
@@ -1098,6 +1120,7 @@ function App() {
                   profile={profile}
                   onBack={() => { selectTrip(null); setSelectedMemberId(null); setOverlayOpen(false); }}
                   onOverlayChange={setOverlayOpen}
+                  onOpenProfile={() => setProfileOpen(true)}
                   selectedMemberId={selectedMemberId}
                   onStarClick={setSelectedMemberId}
                   selectedStarPos={selectedStarPos}
@@ -1107,7 +1130,7 @@ function App() {
                   key="dashboard"
                   profile={profile}
                   isConnected={isConnected}
-                  onLogout={handleLogout}
+                  onOpenProfile={() => setProfileOpen(true)}
                   onSelectTrip={selectTrip}
                   subReady={subReady}
                   trips={trips}
@@ -1117,6 +1140,16 @@ function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {profile && (
+        <ProfileModal
+          open={profileOpen}
+          onClose={() => setProfileOpen(false)}
+          profile={profile}
+          onLogout={handleLogout}
+          tripsCount={trips.length}
+        />
+      )}
     </div>
   );
 }
