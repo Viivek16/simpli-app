@@ -844,29 +844,35 @@ const Dashboard = ({
           display: 'flex', gap: '10px'
         }}>
           <div style={{
-            flex: 1, position: 'relative', display: 'flex', background: 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.14)', borderRadius: '12px',
-            boxShadow: '0 0 22px rgba(255,183,77,0.12)',
-            transition: 'border-color 0.2s'
+            flex: 1, position: 'relative', display: 'flex', alignItems: 'center', gap: '10px',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.16)', borderRadius: '14px',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.35), 0 0 26px rgba(255,183,77,0.10)',
+            paddingLeft: '16px',
+            transition: 'border-color 0.2s, box-shadow 0.2s'
           }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.9 }}>
+              <path d="M12 3v18M3 12h18" />
+            </svg>
             <input
               value={newTripName} onChange={e => setNewTripName(e.target.value)}
               placeholder="Create a new group / galaxy..."
               style={{
-                width: '100%', background: 'transparent', border: 'none', padding: '0 18px', color: 'var(--text)',
-                fontSize: '0.95rem', outline: 'none', fontFamily: 'inherit', height: '48px', borderRadius: '12px'
+                width: '100%', background: 'transparent', border: 'none', padding: '0 18px 0 0', color: 'var(--text)',
+                fontSize: '0.95rem', outline: 'none', fontFamily: 'inherit', height: '50px', borderRadius: '14px'
               }}
               onFocus={(e) => e.target.parentElement!.style.borderColor = 'rgba(255,183,77,0.5)'}
               onBlur={(e) => e.target.parentElement!.style.borderColor = 'rgba(255,255,255,0.14)'}
             />
           </div>
           <button type="submit" disabled={!newTripName.trim() || creating || !isConnected} className="btn-primary" style={{
-            borderRadius: '12px', height: '48px', padding: '0 28px',
-            fontWeight: 600, fontSize: '0.95rem',
-            opacity: newTripName.trim() && !creating && isConnected ? 1 : 0.55,
+            borderRadius: '14px', height: '50px', padding: '0 30px',
+            fontWeight: 700, fontSize: '0.95rem', letterSpacing: '0.01em',
+            opacity: newTripName.trim() && !creating && isConnected ? 1 : 0.9,
             background: 'linear-gradient(180deg, #FFC46B, #E8963A)',
             color: '#ffffff', border: 'none',
-            boxShadow: '0 6px 18px rgba(232,150,58,0.35)',
+            cursor: newTripName.trim() && !creating && isConnected ? 'pointer' : 'default',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3), 0 8px 22px rgba(232,150,58,0.4)',
             transform: 'translateY(0)'
           }}
           onMouseEnter={(e) => { if (!e.currentTarget.disabled) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(232,150,58,0.45)'; } }}

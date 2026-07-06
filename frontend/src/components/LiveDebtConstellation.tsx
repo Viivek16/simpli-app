@@ -239,17 +239,18 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
     }
 
     const elapsed = t - ref.current.userData.mountTime;
-    const fadeStart = 1.0;
-    const fadeEnd = 1.3;
-    let targetFade = 0;
-    if (elapsed > fadeEnd || !_settling) targetFade = 1;
-    else if (elapsed > fadeStart) targetFade = (elapsed - fadeStart) / (fadeEnd - fadeStart);
+    // Bloom-in: begin almost immediately, ease-out over ~0.7s. No long invisible delay.
+    const raw = _settling ? Math.min(Math.max((elapsed - 0.12) / 0.7, 0), 1) : 1;
+    const eased = 1 - Math.pow(1 - raw, 3);
 
-    if (ref.current.userData.fade !== targetFade) {
-      ref.current.userData.fade = targetFade;
+    // Group-level scale bloom (transform only, safe): 0.9 -> 1.0, synchronized with opacity.
+    ref.current.scale.setScalar(0.9 + eased * 0.1);
+
+    if (ref.current.userData.fade !== eased) {
+      ref.current.userData.fade = eased;
       ref.current.traverse((child: any) => {
         if (child.userData && child.userData.baseOpacity !== undefined && child.material) {
-           child.material.opacity = child.userData.baseOpacity * targetFade;
+           child.material.opacity = child.userData.baseOpacity * eased;
         }
       });
     }

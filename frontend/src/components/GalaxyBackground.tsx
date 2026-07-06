@@ -318,10 +318,9 @@ const CameraAnimator = ({
     camera.position.lerpVectors(startPos.current, targetPos, e);
     camera.lookAt(targetPos.x, targetPos.y, targetPos.z - 12);
     
-    // FOV punch
+    // Gentle FOV settle: no punch, no wobble. Camera does a single clean dolly.
     const pCam = camera as THREE.PerspectiveCamera;
-    const fovPunch = Math.sin(t * Math.PI) * 12; // punch ~12 degrees up then back down
-    pCam.fov = THREE.MathUtils.lerp(startFov.current, 58, e) + fovPunch;
+    pCam.fov = THREE.MathUtils.lerp(startFov.current, 50, e);
     pCam.updateProjectionMatrix();
   });
 
