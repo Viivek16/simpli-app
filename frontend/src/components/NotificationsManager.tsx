@@ -143,18 +143,37 @@ export const NotificationsManager = () => {
     };
   }, []);
 
+  // Ask for permission with the NATIVE dialog on the user's first tap after login.
+  // A tap is the user gesture browsers require for a full-strength prompt.
+  // If granted here, the custom banner never needs to appear.
+  useEffect(() => {
+    if (!notificationsSupported()) return;
+    if (Notification.permission !== 'default') return;
+    const once = () => {
+      window.removeEventListener('pointerdown', once);
+      requestNotificationPermission().then((granted) => {
+        if (granted) {
+          localStorage.setItem(BANNER_KEY, '1');
+          setShowBanner(false);
+        }
+      });
+    };
+    window.addEventListener('pointerdown', once, { once: true });
+    return () => window.removeEventListener('pointerdown', once);
+  }, []);
+
   const enable = async () => { localStorage.setItem(BANNER_KEY, '1'); setShowBanner(false); await requestNotificationPermission(); };
   const dismiss = () => { localStorage.setItem(BANNER_KEY, '1'); setShowBanner(false); };
 
   return (
     <AnimatePresence>
       {showBanner && (
+        <div style={{ position: 'fixed', top: 76, left: 16, right: 16, zIndex: 9000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
         <motion.div
           initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
           style={{
-            position: 'fixed', top: 76, left: '50%', transform: 'translateX(-50%)', zIndex: 9000,
-            width: 'calc(100% - 32px)', maxWidth: 420, pointerEvents: 'all',
+            width: '100%', maxWidth: 420, pointerEvents: 'all',
             background: 'rgba(5,6,10,0.92)', border: '1px solid var(--glass-brd)', borderRadius: 14,
             boxShadow: '0 16px 44px rgba(0,0,0,0.5)', padding: '14px 16px',
             backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
@@ -175,6 +194,7 @@ export const NotificationsManager = () => {
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3)',
           }}>Enable</button>
         </motion.div>
+        </div>
       )}
     </AnimatePresence>
   );
