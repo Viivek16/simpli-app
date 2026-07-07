@@ -13,7 +13,7 @@ interface Props { tripId: string; }
 export const KarmaBar = ({ tripId }: Props) => {
   const splits = useExpenseSplit();
   const expenses = useExpense();
-  const me = norm(StDB.localIdentity ?? '');
+  const me = norm(StDB.getLocalId() ?? '');
 
   const netBalance = useMemo(() => {
     if (!me) return 0;

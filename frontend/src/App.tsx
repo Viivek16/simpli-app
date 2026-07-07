@@ -15,6 +15,9 @@ import { useTripMember } from './hooks/useTrips';
 import { buildOwesMap, pairNet } from './lib/ledger';
 import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground } from './components/GalaxyBackground';
+import { LiveDebtConstellation } from './components/LiveDebtConstellation';
+import { KarmaBar } from './components/KarmaBar';
+import { LeaderboardSidebar } from './components/LeaderboardSidebar';
 import { ProfileModal } from './components/ProfileModal';
 import { SettleModal } from './components/SettleModal';
 import { NotificationsManager } from './components/NotificationsManager';
@@ -79,9 +82,10 @@ interface EditPayload {
 }
 
 const TripRoom = ({
-  trip, onBack, profile, onOpenProfile, onOverlayChange, selectedMemberId, onStarClick, selectedStarPos
+  trip, onBack, profile, onOpenProfile, onOpenLeaderboard, onOverlayChange, selectedMemberId, onStarClick, selectedStarPos
 }: {
   trip: Trip; onBack: () => void; profile: GoogleProfile; onOpenProfile: () => void;
+  onOpenLeaderboard: () => void;
   onOverlayChange: (v: boolean) => void; selectedMemberId: string | null; onStarClick: (id: string | null) => void;
   selectedStarPos: { x: number, y: number } | null;
 }) => {
@@ -105,7 +109,7 @@ const TripRoom = ({
   const allUsers = useUser();
   const tripMemberIds = useTripMember(trip.id);
 
-  const localId = norm(StDB.localIdentity ?? '');
+  const localId = norm(StDB.getLocalId() ?? '');
 
   // Build user map for name lookups
   const userMap = useMemo(() => {
@@ -388,6 +392,7 @@ const TripRoom = ({
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </button>
 
+        <div onClick={onOpenLeaderboard} style={{ fontSize: '1.2rem', cursor: 'pointer', opacity: 0.8, marginLeft: '12px' }} title="Leaderboard">🏆</div>
         <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', marginLeft: '8px', cursor: 'pointer' }} />
       </div>
 
@@ -853,9 +858,9 @@ const TripRoom = ({
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 const Dashboard = ({
-  profile, isConnected, onOpenProfile, onSelectTrip, subReady, trips,
+  profile, isConnected, onOpenProfile, onOpenLeaderboard, onSelectTrip, subReady, trips,
 }: {
-  profile: GoogleProfile; isConnected: boolean; onOpenProfile: () => void;
+  profile: GoogleProfile; isConnected: boolean; onOpenProfile: () => void; onOpenLeaderboard: () => void;
   onSelectTrip: (t: Trip) => void; subReady: boolean; trips: Trip[];
 }) => {
   const [newTripName, setNewTripName] = useState('');
@@ -911,7 +916,10 @@ const Dashboard = ({
         </div>
         <div style={{ flex: 1 }} />
         
-        <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)', cursor: 'pointer' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div onClick={onOpenLeaderboard} style={{ fontSize: '1.25rem', cursor: 'pointer', opacity: 0.8 }} title="Leaderboard">🏆</div>
+          <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)', cursor: 'pointer' }} />
+        </div>
       </div>
 
       {/* Empty State */}
@@ -1070,6 +1078,7 @@ function App() {
   const [selectedStarPos, setSelectedStarPos] = useState<{ x: number, y: number } | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const isConnected = useIsConnected();
   const trips = useTrip();
 
@@ -1155,9 +1164,26 @@ function App() {
     localStorage.setItem('simpli_user', JSON.stringify(p));
     setProfile(p);
     const c = StDB.conn as any;
-    if (c) { try { c.reducers.createUser({ name: p.name }); } catch {} }
+    if (c) { 
+      try { c.reducers.createUser({ name: p.name }); } catch {} 
+      try { c.reducers.linkDevice({ google_sub: p.sub }); } catch (e) { console.error('linkDevice failed:', e) }
+    }
     if (!StDB.conn) sessionStorage.setItem('simpli_pending_login', 'true');
   };
+
+  useEffect(() => {
+    if (isConnected && profile) {
+      const pending = sessionStorage.getItem('simpli_pending_login');
+      if (pending) {
+        sessionStorage.removeItem('simpli_pending_login');
+        const c = StDB.conn as any;
+        if (c) {
+          try { c.reducers.createUser({ name: profile.name }); } catch {}
+          try { c.reducers.linkDevice({ google_sub: profile.sub }); } catch (e) { console.error('linkDevice failed:', e) }
+        }
+      }
+    }
+  }, [isConnected, profile]);
 
   useEffect(() => {
     if (profile) {
@@ -1206,6 +1232,7 @@ function App() {
                   onBack={() => { selectTrip(null); setSelectedMemberId(null); setOverlayOpen(false); }}
                   onOverlayChange={setOverlayOpen}
                   onOpenProfile={() => setProfileOpen(true)}
+                  onOpenLeaderboard={() => setLeaderboardOpen(true)}
                   selectedMemberId={selectedMemberId}
                   onStarClick={setSelectedMemberId}
                   selectedStarPos={selectedStarPos}
@@ -1216,6 +1243,7 @@ function App() {
                   profile={profile}
                   isConnected={isConnected}
                   onOpenProfile={() => setProfileOpen(true)}
+                  onOpenLeaderboard={() => setLeaderboardOpen(true)}
                   onSelectTrip={selectTrip}
                   subReady={subReady}
                   trips={trips}
@@ -1227,13 +1255,22 @@ function App() {
       </AnimatePresence>
 
       {profile && (
-        <ProfileModal
-          open={profileOpen}
-          onClose={() => setProfileOpen(false)}
-          profile={profile}
-          onLogout={handleLogout}
-          tripsCount={trips.length}
-        />
+        <AnimatePresence>
+          <ProfileModal
+            open={profileOpen}
+            onClose={() => setProfileOpen(false)}
+            profile={profile}
+            onLogout={handleLogout}
+            tripsCount={trips.length}
+          />
+          
+          <LeaderboardSidebar 
+            open={leaderboardOpen}
+            onClose={() => setLeaderboardOpen(false)}
+            profile={profile}
+            tripsCount={trips.length}
+          />
+        </AnimatePresence>
       )}
     </div>
   );

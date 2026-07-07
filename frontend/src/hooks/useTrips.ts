@@ -28,7 +28,7 @@ export function useTrip(): Trip[] {
     const load = (c: any) => {
       if (destroyed || !c) return;
       try {
-        const me = norm(StDB.localIdentity);
+        const me = norm(StDB.getLocalId());
         let rows: Trip[];
 
         if (!me) {

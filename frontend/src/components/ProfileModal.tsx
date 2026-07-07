@@ -16,13 +16,13 @@ interface Props {
 type Stats = { created: number; added: number; settled: number; joined: number };
 
 // Tiers are resolved by behavior, highest priority first. All signals are client-side.
-const resolveTier = (s: Stats): { label: string; line: string } => {
-  if (s.created >= 3 && s.added >= 10 && s.settled >= 3) return { label: 'Cosmic Legend', line: 'Congrats, you are a Cosmic Legend' };
-  if (s.created >= 3) return { label: 'Initiator', line: 'Congrats, you are an Initiator' };
-  if (s.added >= 8) return { label: 'Controller', line: 'Congrats, you are a Controller' };
-  if (s.settled >= 3) return { label: 'Peacemaker', line: 'Congrats, you are a Peacemaker' };
-  if (s.joined >= 2 || s.added >= 1) return { label: 'Explorer', line: 'Nice, you are an Explorer' };
-  return { label: 'Newbie', line: 'You are a Newbie. Go explore the trenches of SIMPLI.' };
+const resolveTier = (s: Stats): { prefix: string; title: string; description: string } => {
+  if (s.created >= 3 && s.added >= 10 && s.settled >= 3) return { prefix: 'Congrats, you are a', title: 'Cosmic Legend', description: 'A legendary master of the cosmos, managing vast groups and flawless settlements.' };
+  if (s.created >= 3) return { prefix: 'Congrats, you are an', title: 'Initiator', description: 'You love bringing people together and sparking new journeys across the universe.' };
+  if (s.added >= 8) return { prefix: 'Congrats, you are a', title: 'Controller', description: 'A Controller is someone who likes to manage groups, stay on top of all expenses, and settles them up ASAP.' };
+  if (s.settled >= 3) return { prefix: 'Congrats, you are a', title: 'Peacemaker', description: 'You restore balance to the cosmos by swiftly settling debts and maintaining harmony.' };
+  if (s.joined >= 2 || s.added >= 1) return { prefix: 'Nice, you are an', title: 'Explorer', description: 'You are charting new territories and participating in group adventures.' };
+  return { prefix: 'Welcome, you are a', title: 'Newbie', description: 'Go explore the trenches of SIMPLI. Join groups and start adding expenses.' };
 };
 
 export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: Props) => {
@@ -37,7 +37,7 @@ export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: P
   }, [open, onClose]);
 
   const stats: Stats = useMemo(() => {
-    const me = norm(StDB.localIdentity);
+    const me = norm(StDB.getLocalId());
     let added = 0, settled = 0;
     for (const e of expenses) {
       const payer = norm((e as any).payerId ?? (e as any).payer_id);
@@ -81,11 +81,11 @@ export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: P
             transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
             onClick={(e) => e.stopPropagation()}
             style={{
-              width: '100%', maxWidth: 380, borderRadius: 18, overflow: 'hidden',
+              width: '100%', maxWidth: 440, borderRadius: 24, overflow: 'hidden',
               background: 'rgba(5,6,10,0.92)', border: '1px solid var(--glass-brd)',
-              boxShadow: '0 24px 70px rgba(0,0,0,0.6)',
+              boxShadow: '0 32px 90px rgba(0,0,0,0.7)',
               display: 'flex', flexDirection: 'column', alignItems: 'center',
-              padding: '32px 28px 24px', position: 'relative',
+              padding: '40px 32px 32px', position: 'relative',
               backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
             }}
           >
@@ -106,14 +106,33 @@ export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: P
               {profile.email}
             </div>
 
+            {/* Gamified Tier Section */}
             <div style={{
-              marginTop: 18, padding: '10px 16px', borderRadius: 999,
-              background: 'linear-gradient(180deg, rgba(255,196,107,0.16), rgba(232,150,58,0.10))',
-              border: '1px solid rgba(255,183,77,0.35)',
-              display: 'flex', alignItems: 'center', gap: 8, maxWidth: '100%',
+              marginTop: 24, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center',
+              padding: '24px 20px', borderRadius: 16,
+              background: 'linear-gradient(180deg, rgba(255,196,107,0.08), rgba(232,150,58,0.03))',
+              border: '1px solid rgba(255,183,77,0.2)',
+              position: 'relative', overflow: 'hidden'
             }}>
-              <span style={{ fontSize: '0.95rem', color: '#FFC46B' }}>&#10022;</span>
-              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#FFC46B', textAlign: 'center' }}>{tier.line}</span>
+              {/* Decorative glow */}
+              <div style={{ position: 'absolute', top: -30, left: '50%', transform: 'translateX(-50%)', width: 120, height: 60, background: 'rgba(255,196,107,0.2)', filter: 'blur(30px)', borderRadius: '50%' }} />
+              
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600 }}>
+                {tier.prefix}
+              </div>
+              
+              <div className="font-clash" style={{ 
+                fontSize: '2.5rem', fontWeight: 800, 
+                background: 'linear-gradient(180deg, #FFFFFF, #FFC46B)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                textShadow: '0 4px 20px rgba(255,196,107,0.3)',
+                margin: '8px 0', textAlign: 'center', lineHeight: 1.1
+              }}>
+                {tier.title}
+              </div>
+              
+              <div style={{ fontSize: '0.9rem', color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.4, maxWidth: 300 }}>
+                {tier.description}
+              </div>
             </div>
 
             <div style={{
@@ -132,9 +151,10 @@ export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: P
 
             {!confirmLogout ? (
               <button onClick={() => setConfirmLogout(true)} style={{
-                marginTop: 24, width: '100%', height: 46, borderRadius: 12,
+                marginTop: 28, padding: '0 32px', height: 42, borderRadius: 21,
                 background: 'rgba(217,138,108,0.10)', border: '1px solid rgba(217,138,108,0.4)',
-                color: '#d98a6c', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer',
+                color: '#d98a6c', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
+                transition: 'all 0.2s',
               }}>Log out</button>
             ) : (
               <div style={{ marginTop: 24, width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>

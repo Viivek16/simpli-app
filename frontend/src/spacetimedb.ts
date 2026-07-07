@@ -5,6 +5,17 @@ const DATABASE_NAME = "server-simpli";
 
 export let conn: DbConnection | null = null;
 export let localIdentity: string | null = null;
+
+export const getLocalId = () => {
+  try {
+    const raw = localStorage.getItem('simpli_user');
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p.sub) return String(p.sub).toLowerCase().trim();
+    }
+  } catch {}
+  return localIdentity;
+};
 export let subscriptionApplied = false;
 
 // ── Event bus ──────────────────────────────────────────────────────────────────
@@ -45,6 +56,7 @@ const setupSubscription = (c: DbConnection) => {
         'SELECT * FROM expense',
         'SELECT * FROM expense_split',
         'SELECT * FROM trip_member',
+        'SELECT * FROM user_device',
       ]);
   } catch (e) {
     console.error('[SIMPLI] Subscription setup failed', e);

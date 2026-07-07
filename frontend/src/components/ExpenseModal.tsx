@@ -59,7 +59,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const localId = norm(StDB.localIdentity ?? '');
+  const localId = norm(StDB.getLocalId() ?? '');
 
   // Selected participants (default: all members)
   const [selected, setSelected] = useState<Set<string>>(() => {

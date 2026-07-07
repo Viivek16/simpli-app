@@ -89,7 +89,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
   const expenses = useExpense();
   const ref = useRef<THREE.Group>(null);
 
-  const localId = norm(StDB.localIdentity ?? '');
+  const localId = norm(StDB.getLocalId() ?? '');
 
   // Build member user map (id → name)
   const userMap = useMemo(() => {

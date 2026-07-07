@@ -475,7 +475,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
   const expenses = useExpense();
   const splits = useExpenseSplit();
   const allUsers = useUser();
-  const localId = norm(StDB.localIdentity ?? '');
+  const localId = norm(StDB.getLocalId() ?? '');
 
   // Calculate net balances per trip
   const tripBalances = useMemo(() => {

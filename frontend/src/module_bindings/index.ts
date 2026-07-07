@@ -40,6 +40,7 @@ import CreateUserReducer from "./create_user_reducer";
 import DeleteExpenseReducer from "./delete_expense_reducer";
 import DeleteTripReducer from "./delete_trip_reducer";
 import JoinTripReducer from "./join_trip_reducer";
+import LinkDeviceReducer from "./link_device_reducer";
 import SettleDebtReducer from "./settle_debt_reducer";
 import UpdateExpenseReducer from "./update_expense_reducer";
 
@@ -51,6 +52,7 @@ import ExpenseSplitRow from "./expense_split_table";
 import TripRow from "./trip_table";
 import TripMemberRow from "./trip_member_table";
 import UserRow from "./user_table";
+import UserDeviceRow from "./user_device_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -118,6 +120,20 @@ const tablesSchema = __schema({
       { name: 'user_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, UserRow),
+  user_device: __table({
+    name: 'user_device',
+    indexes: [
+      { accessor: 'device_identity', name: 'user_device_device_identity_idx_btree', algorithm: 'btree', columns: [
+        'deviceIdentity',
+      ] },
+      { accessor: 'google_sub', name: 'user_device_google_sub_idx_btree', algorithm: 'btree', columns: [
+        'googleSub',
+      ] },
+    ],
+    constraints: [
+      { name: 'user_device_device_identity_key', constraint: 'unique', columns: ['deviceIdentity'] },
+    ],
+  }, UserDeviceRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -128,6 +144,7 @@ const reducersSchema = __reducers(
   __reducerSchema("delete_expense", DeleteExpenseReducer),
   __reducerSchema("delete_trip", DeleteTripReducer),
   __reducerSchema("join_trip", JoinTripReducer),
+  __reducerSchema("link_device", LinkDeviceReducer),
   __reducerSchema("settle_debt", SettleDebtReducer),
   __reducerSchema("update_expense", UpdateExpenseReducer),
 );

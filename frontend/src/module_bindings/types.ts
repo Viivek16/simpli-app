@@ -46,3 +46,9 @@ export const User = __t.object("User", {
 });
 export type User = __Infer<typeof User>;
 
+export const UserDevice = __t.object("UserDevice", {
+  deviceIdentity: __t.string(),
+  googleSub: __t.string(),
+});
+export type UserDevice = __Infer<typeof UserDevice>;
+

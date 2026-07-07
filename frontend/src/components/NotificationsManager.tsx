@@ -40,7 +40,7 @@ export const NotificationsManager = () => {
       return 'your trip';
     };
     const iAmMember = (c: any, tripId: string): boolean => {
-      const me = norm(StDB.localIdentity);
+      const me = norm(StDB.getLocalId());
       for (const m of c.db.trip_member.iter()) if (mTrip(m) === tripId && mUser(m) === me) return true;
       return false;
     };
@@ -58,7 +58,7 @@ export const NotificationsManager = () => {
       const key = `${tripId}::${uid}`;
       if (seenMember.current.has(key)) return;
       seenMember.current.add(key);
-      const me = norm(StDB.localIdentity);
+      const me = norm(StDB.getLocalId());
       if (uid === me) return;
       if (!iAmMember(c, tripId)) return;
       showAppNotification(`${first(nameOf(c, uid))} joined ${tripNameOf(c, tripId)}`);
@@ -69,7 +69,7 @@ export const NotificationsManager = () => {
       const c = StDB.conn as any; if (!c) return;
       if (seenExpense.current.has(row.id)) return;
       seenExpense.current.add(row.id);
-      const me = norm(StDB.localIdentity);
+      const me = norm(StDB.getLocalId());
       const payer = ePayer(row);
       const tripId = eTrip(row);
       if (payer === me) return;
@@ -88,7 +88,7 @@ export const NotificationsManager = () => {
 
     const onExpenseDelete = (_ctx: any, row: any) => {
       if (!readyRef.current) return;
-      const me = norm(StDB.localIdentity);
+      const me = norm(StDB.getLocalId());
       const payer = ePayer(row);
       const tripId = eTrip(row);
       seenExpense.current.delete(row.id);

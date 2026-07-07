@@ -42,6 +42,13 @@ const spacetimedb = schema({
       user_id: t.string().index(),
     }
   ),
+  user_device: table(
+    { public: true },
+    {
+      device_identity: t.string().primaryKey(),
+      google_sub: t.string().index(),
+    }
+  ),
 });
 export default spacetimedb;
 
@@ -56,21 +63,36 @@ export const createUser = spacetimedb.reducer(
   }
 );
 
+export const linkDevice = spacetimedb.reducer(
+  { google_sub: t.string() },
+  (ctx, { google_sub }) => {
+    const existing = ctx.db.user_device.device_identity.find(ctx.sender.toHexString());
+    if (existing) {
+      ctx.db.user_device.delete(existing);
+    }
+    ctx.db.user_device.insert({ device_identity: ctx.sender.toHexString(), google_sub });
+  }
+);
+
 export const createTrip = spacetimedb.reducer(
   { trip_id: t.string(), name: t.string() },
   (ctx, { trip_id, name }) => {
+    const device = ctx.db.user_device.device_identity.find(ctx.sender.toHexString());
+    const user_id = device ? device.google_sub : ctx.sender.toHexString();
     ctx.db.trip.insert({ id: trip_id, name, created_at: ctx.timestamp });
-    ctx.db.trip_member.insert({ trip_id, user_id: ctx.sender.toHexString() });
+    ctx.db.trip_member.insert({ trip_id, user_id });
   }
 );
 
 export const joinTrip = spacetimedb.reducer(
   { trip_id: t.string() },
   (ctx, { trip_id }) => {
+    const device = ctx.db.user_device.device_identity.find(ctx.sender.toHexString());
+    const user_id = device ? device.google_sub : ctx.sender.toHexString();
     for (const m of ctx.db.trip_member.trip_id.filter(trip_id)) {
-      if (m.user_id === ctx.sender.toHexString()) return;
+      if (m.user_id === user_id) return;
     }
-    ctx.db.trip_member.insert({ trip_id, user_id: ctx.sender.toHexString() });
+    ctx.db.trip_member.insert({ trip_id, user_id });
   }
 );
 
@@ -83,6 +105,9 @@ export const addExpense = spacetimedb.reducer(
     splits: t.string(), // JSON array of splits
   },
   (ctx, { expense_id, trip_id, amount, description, splits }) => {
+    const device = ctx.db.user_device.device_identity.find(ctx.sender.toHexString());
+    const user_id = device ? device.google_sub : ctx.sender.toHexString();
+
     const parsedSplits = JSON.parse(splits) as { debtor_id: string; amount_owed: number }[];
     let sum = 0;
     for (const split of parsedSplits) {
@@ -96,7 +121,7 @@ export const addExpense = spacetimedb.reducer(
     ctx.db.expense.insert({
       id: expense_id,
       trip_id,
-      payer_id: ctx.sender.toHexString(),
+      payer_id: user_id,
       amount,
       description,
       timestamp: ctx.timestamp
@@ -138,7 +163,8 @@ export const settleDebt = spacetimedb.reducer(
 
 // Helper: throws if the calling user is not a member of the trip
 const requireMember = (ctx: any, trip_id: string) => {
-  const sender = ctx.sender.toHexString();
+  const device = ctx.db.user_device.device_identity.find(ctx.sender.toHexString());
+  const sender = device ? device.google_sub : ctx.sender.toHexString();
   for (const m of ctx.db.trip_member.trip_id.filter(trip_id)) {
     if (m.user_id === sender) return;
   }

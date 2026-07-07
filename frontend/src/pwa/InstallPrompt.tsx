@@ -22,7 +22,8 @@ export const InstallPrompt = () => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (isStandalone() || recentlyDismissed()) return;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (!isMobile || isStandalone() || recentlyDismissed()) return;
 
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
