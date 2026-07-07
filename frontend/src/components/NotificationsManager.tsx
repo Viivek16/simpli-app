@@ -29,10 +29,23 @@ export const NotificationsManager = () => {
 
     const nameOf = (c: any, id: string): string => {
       const target = norm(id);
+      const identityToName = new Map<string, string>();
       for (const u of c.db.user.iter()) {
         const uid = (u.id && typeof u.id === 'object' && 'toHexString' in u.id) ? norm(u.id.toHexString()) : norm(u.id);
-        if (uid === target) return u.name || 'Someone';
+        if (uid && !identityToName.has(uid)) identityToName.set(uid, u.name || 'Someone');
       }
+      // Legacy identity-keyed rows resolve directly.
+      if (identityToName.has(target)) return identityToName.get(target) as string;
+      // Otherwise the id is a Google sub: hop sub -> device identity -> name.
+      try {
+        for (const d of c.db.user_device.iter()) {
+          const sub = norm(d.googleSub ?? d.google_sub);
+          if (sub === target) {
+            const nm = identityToName.get(norm(d.deviceIdentity ?? d.device_identity));
+            if (nm) return nm;
+          }
+        }
+      } catch {}
       return 'Someone';
     };
     const tripNameOf = (c: any, id: string): string => {

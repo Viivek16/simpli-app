@@ -39,6 +39,20 @@ self.addEventListener('fetch', (e) => {
   );
 });
 
+self.addEventListener('push', (event) => {
+  let data = { title: 'SIMPLI', body: 'New activity in your trips' };
+  try { if (event.data) data = { ...data, ...event.data.json() }; } catch {}
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'SIMPLI', {
+      body: data.body || '',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: 'simpli-activity',
+      renotify: true,
+    })
+  );
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
