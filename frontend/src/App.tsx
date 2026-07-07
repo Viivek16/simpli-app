@@ -1164,21 +1164,22 @@ function App() {
     const c = StDB.conn as any;
     if (c) { 
       try { c.reducers.createUser({ name: p.name }); } catch {} 
-      try { c.reducers.linkDevice({ google_sub: p.sub }); } catch (e) { console.error('linkDevice failed:', e) }
+      try { c.reducers.linkDevice({ googleSub: p.sub }); } catch (e) { console.error('linkDevice failed:', e) }
     }
     if (!StDB.conn) sessionStorage.setItem('simpli_pending_login', 'true');
   };
 
   useEffect(() => {
     if (isConnected && profile) {
+      const c = StDB.conn as any;
+      if (c) {
+        try { c.reducers.createUser({ name: profile.name }); } catch {}
+        try { c.reducers.linkDevice({ googleSub: profile.sub }); } catch (e) { console.error('linkDevice failed:', e) }
+      }
+      
       const pending = sessionStorage.getItem('simpli_pending_login');
       if (pending) {
         sessionStorage.removeItem('simpli_pending_login');
-        const c = StDB.conn as any;
-        if (c) {
-          try { c.reducers.createUser({ name: profile.name }); } catch {}
-          try { c.reducers.linkDevice({ google_sub: profile.sub }); } catch (e) { console.error('linkDevice failed:', e) }
-        }
       }
     }
   }, [isConnected, profile]);

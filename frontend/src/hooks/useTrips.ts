@@ -35,9 +35,13 @@ export function useTrip(): Trip[] {
           // Identity not ready — fail open: show all trips
           rows = [...c.db.trip.iter()].map((t: any) => ({ id: t.id, name: t.name }));
         } else {
+          const meHex = norm(StDB.localIdentity);
           const myTripIds = new Set(
             [...c.db.trip_member.iter()]
-              .filter((m: any) => norm(memberUserId(m)) === me)
+              .filter((m: any) => {
+                const uid = norm(memberUserId(m));
+                return uid === me || (meHex && uid === meHex);
+              })
               .map(memberTripId)
           );
           const allTrips = [...c.db.trip.iter()];

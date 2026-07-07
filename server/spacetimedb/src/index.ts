@@ -66,11 +66,38 @@ export const createUser = spacetimedb.reducer(
 export const linkDevice = spacetimedb.reducer(
   { google_sub: t.string() },
   (ctx, { google_sub }) => {
-    const existing = ctx.db.user_device.device_identity.find(ctx.sender.toHexString());
+    const hex = ctx.sender.toHexString();
+    const existing = ctx.db.user_device.device_identity.find(hex);
     if (existing) {
       ctx.db.user_device.delete(existing);
     }
-    ctx.db.user_device.insert({ device_identity: ctx.sender.toHexString(), google_sub });
+    ctx.db.user_device.insert({ device_identity: hex, google_sub });
+
+    // Migrate trip_member
+    for (const member of ctx.db.trip_member.user_id.filter(hex)) {
+      ctx.db.trip_member.delete(member);
+      let alreadyIn = false;
+      for (const m of ctx.db.trip_member.trip_id.filter(member.trip_id)) {
+        if (m.user_id === google_sub) alreadyIn = true;
+      }
+      if (!alreadyIn) {
+        ctx.db.trip_member.insert({ trip_id: member.trip_id, user_id: google_sub });
+      }
+    }
+
+    // Migrate expenses
+    for (const exp of ctx.db.expense.iter()) {
+      if (exp.payer_id === hex) {
+        ctx.db.expense.delete(exp);
+        ctx.db.expense.insert({ ...exp, payer_id: google_sub });
+      }
+    }
+
+    // Migrate expense_split
+    for (const split of ctx.db.expense_split.debtor_id.filter(hex)) {
+      ctx.db.expense_split.delete(split);
+      ctx.db.expense_split.insert({ ...split, debtor_id: google_sub });
+    }
   }
 );
 
