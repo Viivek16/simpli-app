@@ -286,6 +286,43 @@ const TripRoom = ({
     return { totalGroupSpend, groupBreakdown, yourExpenses, youSpent, youOwedBack };
   }, [tripExpenses, splits, tripMembers, localId]);
 
+  // Minimum cash flow debt simplification.
+  // Net position per member, then greedily match largest debtor to largest creditor.
+  const simplified = useMemo(() => {
+    const net = new Map<string, number>();
+    tripMembers.forEach(m => net.set(m.id, 0));
+    Object.entries(owes).forEach(([debtor, row]) => {
+      Object.entries(row).forEach(([payee, amt]) => {
+        if (net.has(debtor)) net.set(debtor, (net.get(debtor) || 0) - amt);
+        if (net.has(payee)) net.set(payee, (net.get(payee) || 0) + amt);
+      });
+    });
+
+    const creditors = [...net.entries()].filter(([, v]) => v > 0.01).map(([id, v]) => ({ id, v })).sort((a, b) => b.v - a.v);
+    const debtors = [...net.entries()].filter(([, v]) => v < -0.01).map(([id, v]) => ({ id, v: -v })).sort((a, b) => b.v - a.v);
+
+    const transfers: { from: string; to: string; amount: number }[] = [];
+    let i = 0, j = 0;
+    while (i < debtors.length && j < creditors.length) {
+      const pay = Math.min(debtors[i].v, creditors[j].v);
+      if (pay > 0.01) transfers.push({ from: debtors[i].id, to: creditors[j].id, amount: pay });
+      debtors[i].v -= pay;
+      creditors[j].v -= pay;
+      if (debtors[i].v <= 0.01) i++;
+      if (creditors[j].v <= 0.01) j++;
+    }
+
+    // Raw pairwise debt count, for the reduction stat
+    let rawCount = 0;
+    for (let a = 0; a < tripMembers.length; a++) {
+      for (let b = a + 1; b < tripMembers.length; b++) {
+        if (Math.abs(pairNet(owes, tripMembers[a].id, tripMembers[b].id)) > 0.01) rawCount++;
+      }
+    }
+
+    return { transfers, rawCount };
+  }, [owes, tripMembers]);
+
   // Contextual balance header, always from the local user's perspective.
   const headerContext = useMemo(() => {
     if (!selectedMemberId || selectedMemberId === localId) {
@@ -569,6 +606,46 @@ const TripRoom = ({
             </div>
             
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Simplify Debts</div>
+                  {simplified.transfers.length > 0 && simplified.rawCount > simplified.transfers.length && (
+                    <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--self)' }}>
+                      {simplified.rawCount} payments to {simplified.transfers.length}
+                    </div>
+                  )}
+                </div>
+                {simplified.transfers.length === 0 ? (
+                  <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>Nothing to simplify. Everyone is settled.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid var(--glass-brd)' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.45 }}>
+                      The fewest transfers that clear every debt in this galaxy.
+                    </div>
+                    {simplified.transfers.map((t, i) => {
+                      const fromName = t.from === localId ? 'You' : (userMap.get(t.from) || 'Member').split(' ')[0];
+                      const toName = t.to === localId ? 'You' : (userMap.get(t.to) || 'Member').split(' ')[0];
+                      return (
+                        <div key={`${t.from}-${t.to}-${i}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, fontSize: '0.85rem' }}>
+                            <span style={{ color: 'var(--owe)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fromName}</span>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                              <line x1="4" y1="12" x2="20" y2="12" /><polyline points="13 5 20 12 13 19" />
+                            </svg>
+                            <span style={{ color: 'var(--owed)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toName}</span>
+                            <span className="money" style={{ color: 'var(--text)', fontWeight: 700, marginLeft: '4px', flexShrink: 0 }}>{INR(Math.round(t.amount))}</span>
+                          </div>
+                          <button onClick={() => setSettlePayload({ payerId: t.from, payeeId: t.to, amount: Math.round(t.amount) })}
+                            style={{ background: 'transparent', border: '1px solid var(--self)', color: '#ffffff', borderRadius: '12px', height: '30px', padding: '0 10px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+                            Settle
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Your Spend</div>
                 {insightsData.yourExpenses.length === 0 ? (
