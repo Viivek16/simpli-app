@@ -16,6 +16,7 @@ import { buildOwesMap, pairNet } from './lib/ledger';
 import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground } from './components/GalaxyBackground';
 import { ProfileModal } from './components/ProfileModal';
+import { SettleModal } from './components/SettleModal';
 import { NotificationsManager } from './components/NotificationsManager';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster, toast } from './components/Toast';
@@ -91,6 +92,7 @@ const TripRoom = ({
   const [showDeleteTrip, setShowDeleteTrip] = useState(false);
   const [deleteExpenseLoading, setDeleteExpenseLoading] = useState<string | null>(null);
   const [mobileLedgerOpen, setMobileLedgerOpen] = useState(false);
+  const [settlePayload, setSettlePayload] = useState<{ payerId: string; payeeId: string; amount: number } | null>(null);
 
   useEffect(() => {
     if (mobileLedgerOpen) document.body.classList.add('bottom-sheet-open');
@@ -149,8 +151,8 @@ const TripRoom = ({
 
   // Sync overlay status with App to pause background
   useEffect(() => {
-    onOverlayChange(showModal || showDeleteTrip);
-  }, [showModal, showDeleteTrip, onOverlayChange]);
+    onOverlayChange(showModal || showDeleteTrip || settlePayload !== null);
+  }, [showModal, showDeleteTrip, settlePayload, onOverlayChange]);
 
   // Handle Escape / Backspace for back navigation
   useEffect(() => {
@@ -159,13 +161,13 @@ const TripRoom = ({
         const target = e.target as HTMLElement;
         const tag = target.tagName.toLowerCase();
         if (tag === 'input' || tag === 'textarea') return;
-        if (showModal || showDeleteTrip) return;
+        if (showModal || showDeleteTrip || settlePayload) return;
         onBack();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onBack, showModal, showDeleteTrip]);
+  }, [onBack, showModal, showDeleteTrip, settlePayload]);
 
   const handleDeleteExpense = async (expId: string, desc: string) => {
     if (deleteConfirm !== expId) {
@@ -229,20 +231,21 @@ const TripRoom = ({
 
   const owes = useMemo(() => buildOwesMap(tripExpenses, splits), [tripExpenses, splits]);
 
-  const memberBalances = useMemo(() => {
-    if (!selectedMemberId) return null;
+  // Balances are ALWAYS from the local user's perspective.
+  // amount > 0 means that member owes the local user.
+  const myBalances = useMemo(() => {
     const result: { otherId: string; amount: number }[] = [];
     let net = 0;
     tripMembers.forEach(m => {
-      if (m.id === selectedMemberId) return;
-      const amount = pairNet(owes, selectedMemberId, m.id);
+      if (m.id === localId) return;
+      const amount = pairNet(owes, localId, m.id);
       net += amount;
       if (Math.abs(amount) > 0.01) {
         result.push({ otherId: m.id, amount });
       }
     });
     return { net, details: result.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount)) };
-  }, [selectedMemberId, owes, tripMembers]);
+  }, [owes, tripMembers, localId]);
 
   // Insights Data
   const insightsData = useMemo(() => {
@@ -283,16 +286,18 @@ const TripRoom = ({
     return { totalGroupSpend, groupBreakdown, yourExpenses, youSpent, youOwedBack };
   }, [tripExpenses, splits, tripMembers, localId]);
 
-  // B1: Contextual balance header
+  // Contextual balance header, always from the local user's perspective.
   const headerContext = useMemo(() => {
     if (!selectedMemberId || selectedMemberId === localId) {
-      return { type: 'overall', amount: memberBalances?.net || 0, name: '' };
+      return { type: 'overall', amount: myBalances.net, name: '' };
     }
     const otherName = userMap.get(selectedMemberId) || 'Member';
     const firstName = otherName.split(' ')[0];
-    const match = memberBalances?.details.find(d => d.otherId === selectedMemberId);
-    return { type: 'pair', amount: match ? match.amount : 0, name: firstName };
-  }, [selectedMemberId, localId, memberBalances, userMap]);  return (
+    const amount = pairNet(owes, localId, selectedMemberId);
+    return { type: 'pair', amount: Math.abs(amount) > 0.01 ? amount : 0, name: firstName };
+  }, [selectedMemberId, localId, myBalances, owes, userMap]);
+
+  return (
     <motion.div
       key="trip-room"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -417,10 +422,10 @@ const TripRoom = ({
         {/* B2: Settle up rows */}
         <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Balances</div>
-          {(memberBalances?.details.length || 0) === 0 ? (
+          {myBalances.details.length === 0 ? (
             <div style={{ color: 'var(--text-dim)', fontSize: '0.85rem' }}>All settled ✓</div>
           ) : (
-            memberBalances?.details.map(d => {
+            myBalances.details.map(d => {
               const otherName = userMap.get(d.otherId) || 'Member';
               const firstName = otherName.split(' ')[0];
               const isPositive = d.amount > 0;
@@ -429,14 +434,10 @@ const TripRoom = ({
                   <div style={{ fontSize: '0.85rem', color: isPositive ? 'var(--owed)' : 'var(--owe)' }}>
                     {isPositive ? `${firstName} owes you ${INR(Math.abs(d.amount))}` : `You owe ${firstName} ${INR(Math.abs(d.amount))}`}
                   </div>
-                  <button onClick={async () => {
+                  <button onClick={() => {
                     const payerId = isPositive ? d.otherId : localId;
                     const payeeId = isPositive ? localId : d.otherId;
-                    try {
-                      await (StDB.conn as any).reducers.settleDebt({ tripId: trip.id, debtorId: payerId, payeeId: payeeId, amount: Math.abs(d.amount) });
-                      AudioService.playBlip();
-                      toast.success('Settled up!');
-                    } catch (e: any) { toast.error(e?.message || 'Failed'); }
+                    setSettlePayload({ payerId, payeeId, amount: Math.round(Math.abs(d.amount)) });
                   }} style={{ background: 'transparent', border: '1px solid var(--self)', color: '#ffffff', borderRadius: '12px', height: '34px', padding: '0 12px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Settle</button>
                 </div>
               );
@@ -678,6 +679,15 @@ const TripRoom = ({
           </div>
         )}
       </AnimatePresence>
+
+      <SettleModal
+        payload={settlePayload}
+        onClose={() => setSettlePayload(null)}
+        tripId={trip.id}
+        userMap={userMap}
+        localId={localId}
+      />
+
       {/* B3: DOM Popup for selected star */}
       <AnimatePresence>
         {selectedMemberId && selectedStarPos && (
@@ -740,16 +750,12 @@ const TripRoom = ({
             </div>
             {selectedMemberId !== localId && Math.abs(headerContext.amount) > 0.5 && (
               <button
-                onClick={async (e) => {
+                onClick={(e) => {
                   e.stopPropagation();
                   const payerId = headerContext.amount > 0 ? selectedMemberId : localId;
                   const payeeId = headerContext.amount > 0 ? localId : selectedMemberId;
-                  try {
-                    await (StDB.conn as any).reducers.settleDebt({ tripId: trip.id, debtorId: payerId, payeeId: payeeId, amount: Math.abs(headerContext.amount) });
-                    AudioService.playBlip();
-                    toast.success('Settled up!');
-                    onStarClick(null);
-                  } catch (e: any) { toast.error(e?.message || 'Failed'); }
+                  setSettlePayload({ payerId, payeeId, amount: Math.round(Math.abs(headerContext.amount)) });
+                  onStarClick(null);
                 }}
                 className="btn-primary"
                 style={{

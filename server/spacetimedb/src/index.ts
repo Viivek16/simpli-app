@@ -117,7 +117,7 @@ export const addExpense = spacetimedb.reducer(
 export const settleDebt = spacetimedb.reducer(
   { trip_id: t.string(), debtor_id: t.string(), payee_id: t.string(), amount: t.f64() },
   (ctx, { trip_id, debtor_id, payee_id, amount }) => {
-    const synthetic_expense_id = `settle_${ctx.timestamp}_${debtor_id}_${payee_id}`;
+    const synthetic_expense_id = `settle_${ctx.timestamp.microsSinceUnixEpoch}_${debtor_id}_${payee_id}`;
     
     ctx.db.expense.insert({
       id: synthetic_expense_id,
