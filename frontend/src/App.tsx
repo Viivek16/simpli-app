@@ -15,8 +15,6 @@ import { useTripMember } from './hooks/useTrips';
 import { buildOwesMap, pairNet } from './lib/ledger';
 import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground } from './components/GalaxyBackground';
-import { LiveDebtConstellation } from './components/LiveDebtConstellation';
-import { KarmaBar } from './components/KarmaBar';
 import { LeaderboardSidebar } from './components/LeaderboardSidebar';
 import { ProfileModal } from './components/ProfileModal';
 import { SettleModal } from './components/SettleModal';

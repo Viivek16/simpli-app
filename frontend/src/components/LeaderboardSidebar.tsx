@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import * as StDB from '../spacetimedb';
 
 interface Props {
   open: boolean;
@@ -9,7 +8,9 @@ interface Props {
   tripsCount: number;
 }
 
-const mockUsers = [
+type LeaderboardUser = { name: string; tier: string; score: number; color: string; isMe?: boolean };
+
+const mockUsers: LeaderboardUser[] = [
   { name: 'Alex M.', tier: 'Cosmic Legend', score: 9800, color: '#FFC46B' },
   { name: 'Sarah J.', tier: 'Cosmic Legend', score: 9200, color: '#FFC46B' },
   { name: 'Chris T.', tier: 'Initiator', score: 7500, color: '#9d8cdb' },
