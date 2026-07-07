@@ -356,13 +356,18 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
       const angle = (activeTripIndex / Math.max(trips.length, 1)) * Math.PI * 2;
       const r = Math.max(6.5, 5 + trips.length * 1.0);
       const pos = new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
-      
-      targetPos.current = new THREE.Vector3(pos.x, pos.y + 4, pos.z + 12);
+      const isPhone = typeof window !== 'undefined' && window.innerWidth <= 768;
+      // On phones, sit further back so every member star fits without a pinch-zoom out.
+      targetPos.current = isPhone
+        ? new THREE.Vector3(pos.x, pos.y + 5, pos.z + 19)
+        : new THREE.Vector3(pos.x, pos.y + 4, pos.z + 12);
       setSettling(true); setSettled(false);
       const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
     } else {
-      targetPos.current = new THREE.Vector3(0, 6, 16);
+      const isPhone = typeof window !== 'undefined' && window.innerWidth <= 768;
+      // Phones frame all galaxies inside the smaller viewport.
+      targetPos.current = isPhone ? new THREE.Vector3(0, 7, 24) : new THREE.Vector3(0, 6, 16);
       setSettling(true); setSettled(false);
       const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
@@ -392,7 +397,7 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
         enablePan={false} enableRotate enableZoom
         enableDamping dampingFactor={0.06}
         autoRotate={!activeTripId && !uiPaused} autoRotateSpeed={0.3}
-        minDistance={3} maxDistance={140}
+        minDistance={4} maxDistance={typeof window !== 'undefined' && window.innerWidth <= 768 ? 70 : 140}
       />
 
       {/* Camera fly-in: only runs during settle window */}
@@ -531,7 +536,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
     }}>
       <ErrorBoundary fallback={<CosmosFallback trips={trips} onSelectTrip={onSelectTrip} />}>
         <Canvas
-          camera={{ position: [0, 6, 16], fov: 50 }}
+          camera={{ position: (typeof window !== 'undefined' && window.innerWidth <= 768) ? [0, 12, 34] : [0, 11, 27], fov: 50 }}
           dpr={[1, 1.5]}
           frameloop={uiPaused ? 'never' : 'always'}
           style={{ pointerEvents: uiPaused ? 'none' : 'all' }}
