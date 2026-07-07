@@ -12,6 +12,8 @@ import { useExpense, useExpenseSplit, useUser } from './module_bindings/hooks';
 import type { Expense, ExpenseSplit } from './module_bindings/types';
 import { useTrip, type Trip } from './hooks/useTrips';
 import { useTripMember } from './hooks/useTrips';
+import { useUserDevice } from './hooks/useUserDevice';
+import { resolveNames } from './lib/names';
 import { buildOwesMap, pairNet } from './lib/ledger';
 import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground } from './components/GalaxyBackground';
@@ -109,16 +111,9 @@ const TripRoom = ({
 
   const localId = norm(StDB.getLocalId() ?? '');
 
-  // Build user map for name lookups
-  const userMap = useMemo(() => {
-    const m = new Map<string, string>();
-    allUsers.forEach(u => {
-      const id = (typeof u.id === 'object' && u.id && 'toHexString' in u.id)
-        ? norm(u.id.toHexString()) : norm(u.id);
-      if (!m.has(id)) m.set(id, u.name || 'Member');
-    });
-    return m;
-  }, [allUsers]);
+  // Build user map for name lookups (resolves both identity hex and Google sub -> name)
+  const userDevices = useUserDevice();
+  const userMap = useMemo(() => resolveNames(allUsers, userDevices), [allUsers, userDevices]);
 
   // Trip members with names for modal
   const tripMembers = useMemo(() => {
@@ -335,6 +330,31 @@ const TripRoom = ({
     const amount = pairNet(owes, localId, selectedMemberId);
     return { type: 'pair', amount: Math.abs(amount) > 0.01 ? amount : 0, name: firstName };
   }, [selectedMemberId, localId, myBalances, owes, userMap]);
+
+  // What to show on a member's star popup. First their balance WITH ME; if settled with me,
+  // their single biggest debt with anyone else. isDebt=true means the selected member is the
+  // one who OWES (so it renders red); false means they are the one owed (renders green).
+  const starDebt = useMemo(() => {
+    if (!selectedMemberId || selectedMemberId === localId) return null;
+    const memberName = (userMap.get(selectedMemberId) || 'Member').split(' ')[0];
+    const withMe = pairNet(owes, localId, selectedMemberId); // >0 they owe me, <0 I owe them
+    if (Math.abs(withMe) > 0.5) {
+      if (withMe > 0) return { text: `${memberName} owes you`, amount: withMe, isDebt: true, withMe: true, dir: 'theyOweMe' as const };
+      return { text: `You owe ${memberName}`, amount: -withMe, isDebt: false, withMe: true, dir: 'iOweThem' as const };
+    }
+    let best: { otherId: string; amount: number; selectedOwes: boolean } | null = null;
+    let bestAbs = 0.5;
+    tripMembers.forEach(m => {
+      if (m.id === selectedMemberId || m.id === localId) return;
+      const a = pairNet(owes, selectedMemberId, m.id); // >0 m owes selected, <0 selected owes m
+      if (Math.abs(a) > bestAbs) { bestAbs = Math.abs(a); best = { otherId: m.id, amount: Math.abs(a), selectedOwes: a < 0 }; }
+    });
+    const chosen = best as { otherId: string; amount: number; selectedOwes: boolean } | null;
+    if (!chosen) return { text: 'Settled up with you', amount: 0, isDebt: false, withMe: false, dir: 'settled' as const };
+    const otherName = (userMap.get(chosen.otherId) || 'Member').split(' ')[0];
+    if (chosen.selectedOwes) return { text: `${memberName} owes ${otherName}`, amount: chosen.amount, isDebt: true, withMe: false, dir: 'thirdParty' as const };
+    return { text: `${otherName} owes ${memberName}`, amount: chosen.amount, isDebt: false, withMe: false, dir: 'thirdParty' as const };
+  }, [selectedMemberId, localId, owes, tripMembers, userMap]);
 
   return (
     <motion.div
@@ -807,14 +827,14 @@ const TripRoom = ({
               <div style={{ color: 'var(--text)', fontSize: '1.1rem', fontWeight: 700, fontFamily: 'Satoshi, sans-serif' }}>
                 {selectedMemberId === localId ? 'You' : userMap.get(selectedMemberId) || 'Member'}
               </div>
-              {selectedMemberId !== localId && (
+              {selectedMemberId !== localId && starDebt && (
                 <>
                   <div style={{ marginTop: '8px', fontSize: '0.85rem', color: 'var(--text-dim)' }}>
-                    {Math.abs(headerContext.amount) < 0.5 ? 'Settled up with you' : headerContext.amount > 0 ? 'Owes you' : 'You owe'}
+                    {starDebt.text}
                   </div>
-                  {Math.abs(headerContext.amount) > 0.5 && (
-                    <div className="money" style={{ fontSize: '1.4rem', fontWeight: 700, color: headerContext.amount > 0 ? 'var(--owed)' : 'var(--owe)' }}>
-                      {INR(Math.abs(headerContext.amount))}
+                  {starDebt.amount > 0.5 && (
+                    <div className="money" style={{ fontSize: '1.4rem', fontWeight: 700, color: starDebt.isDebt ? 'var(--owe)' : 'var(--owed)' }}>
+                      {INR(starDebt.amount)}
                     </div>
                   )}
                 </>
@@ -828,13 +848,14 @@ const TripRoom = ({
                 </>
               )}
             </div>
-            {selectedMemberId !== localId && Math.abs(headerContext.amount) > 0.5 && (
+            {selectedMemberId !== localId && starDebt && starDebt.withMe && starDebt.amount > 0.5 && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  const payerId = headerContext.amount > 0 ? selectedMemberId : localId;
-                  const payeeId = headerContext.amount > 0 ? localId : selectedMemberId;
-                  setSettlePayload({ payerId, payeeId, amount: Math.round(Math.abs(headerContext.amount)) });
+                  const iOwe = starDebt.dir === 'iOweThem';
+                  const payerId = iOwe ? localId : selectedMemberId;
+                  const payeeId = iOwe ? selectedMemberId : localId;
+                  setSettlePayload({ payerId, payeeId, amount: Math.round(starDebt.amount) });
                   onStarClick(null);
                 }}
                 className="btn-primary"

@@ -24,6 +24,8 @@ import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import * as StDB from '../spacetimedb';
 import { AudioService } from '../audio';
 import { buildOwesMap, pairNet } from '../lib/ledger';
+import { useUserDevice } from '../hooks/useUserDevice';
+import { resolveNames } from '../lib/names';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 
@@ -475,16 +477,12 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
   const expenses = useExpense();
   const splits = useExpenseSplit();
   const allUsers = useUser();
+  const userDevices = useUserDevice();
   const localId = norm(StDB.getLocalId() ?? '');
 
   // Calculate net balances per trip
   const tripBalances = useMemo(() => {
-    const m = new Map<string, string>();
-    allUsers.forEach(u => {
-      const id = (typeof u.id === 'object' && u.id && 'toHexString' in u.id)
-        ? norm(u.id.toHexString()) : norm(u.id);
-      if (!m.has(id)) m.set(id, u.name || 'Member');
-    });
+    const m = resolveNames(allUsers, userDevices);
 
     const res: Record<string, { settled: boolean, netBalances: { owes: string, owed: string, amtOwes: number, amtOwed: number } | null }> = {};
     trips.forEach(trip => {
@@ -513,8 +511,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
         let amtOwed = 0; let owedBy = '';
         let amtOwes = 0; let owesTo = '';
         
-        allUsers.forEach(u => {
-          const otherId = norm((typeof u.id === 'object' && u.id && 'toHexString' in u.id) ? u.id.toHexString() : u.id);
+        Object.keys(netUser).forEach(otherId => {
           if (otherId === localId) return;
           const amt = pairNet(owes, localId, otherId);
           if (amt > 0.5 && amt > amtOwed) { amtOwed = amt; owedBy = m.get(otherId) || 'Member'; }
@@ -525,7 +522,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
       }
     });
     return res;
-  }, [trips, expenses, splits, allUsers, localId]);
+  }, [trips, expenses, splits, allUsers, userDevices, localId]);
 
   return (
     <div style={{
