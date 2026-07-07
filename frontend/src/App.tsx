@@ -410,7 +410,23 @@ const TripRoom = ({
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </button>
 
-        <div onClick={onOpenLeaderboard} style={{ fontSize: '1.2rem', cursor: 'pointer', opacity: 0.8, marginLeft: '12px' }} title="Leaderboard">🏆</div>
+<button onClick={onOpenLeaderboard} title="Leaderboard" aria-label="Leaderboard" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 32, height: 32, marginLeft: '12px', padding: 0,
+          borderRadius: '50%', cursor: 'pointer',
+          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,196,107,0.25)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+        }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="trophyGradRoom" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#FFD79A" /><stop offset="1" stopColor="#E8963A" />
+              </linearGradient>
+            </defs>
+            <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z" stroke="url(#trophyGradRoom)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M17 5h2.5a1.5 1.5 0 0 1 0 5H17M7 5H4.5a1.5 1.5 0 0 0 0 5H7" stroke="url(#trophyGradRoom)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
         <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', marginLeft: '8px', cursor: 'pointer' }} />
       </div>
 
@@ -936,7 +952,23 @@ const Dashboard = ({
         <div style={{ flex: 1 }} />
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div onClick={onOpenLeaderboard} style={{ fontSize: '1.25rem', cursor: 'pointer', opacity: 0.8 }} title="Leaderboard">🏆</div>
+          <button onClick={onOpenLeaderboard} title="Leaderboard" aria-label="Leaderboard" style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 34, height: 34, padding: 0,
+            borderRadius: '50%', cursor: 'pointer',
+            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,196,107,0.25)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="trophyGradHome" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#FFD79A" /><stop offset="1" stopColor="#E8963A" />
+                </linearGradient>
+              </defs>
+              <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z" stroke="url(#trophyGradHome)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M17 5h2.5a1.5 1.5 0 0 1 0 5H17M7 5H4.5a1.5 1.5 0 0 0 0 5H7" stroke="url(#trophyGradHome)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
           <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)', cursor: 'pointer' }} />
         </div>
       </div>
@@ -1284,11 +1316,10 @@ function App() {
             tripsCount={trips.length}
           />
           
-          <LeaderboardSidebar 
+          <LeaderboardSidebar
             open={leaderboardOpen}
             onClose={() => setLeaderboardOpen(false)}
-            profile={profile}
-            tripsCount={trips.length}
+            myName={profile.name}
           />
         </AnimatePresence>
       )}

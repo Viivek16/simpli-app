@@ -1,45 +1,88 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
+import { useUserDevice } from '../hooks/useUserDevice';
+import { useTrip } from '../hooks/useTrips';
+import { resolveNames } from '../lib/names';
+import * as StDB from '../spacetimedb';
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  profile: { name: string; picture: string };
-  tripsCount: number;
+  myName: string;
 }
 
-type LeaderboardUser = { name: string; tier: string; score: number; color: string; isMe?: boolean };
+const norm = (s: any): string => String(s ?? '').toLowerCase().trim();
 
-const mockUsers: LeaderboardUser[] = [
-  { name: 'Alex M.', tier: 'Cosmic Legend', score: 9800, color: '#FFC46B' },
-  { name: 'Sarah J.', tier: 'Cosmic Legend', score: 9200, color: '#FFC46B' },
-  { name: 'Chris T.', tier: 'Initiator', score: 7500, color: '#9d8cdb' },
-  { name: 'Elena R.', tier: 'Controller', score: 6200, color: '#6bc7ff' },
-  { name: 'Mike L.', tier: 'Peacemaker', score: 4100, color: '#76e5b1' },
-];
+type Tier = { name: string; color: string };
 
-export const LeaderboardSidebar = ({ open, onClose, profile, tripsCount }: Props) => {
+// Activity-based tiers, ranked. added = non-settlement expenses this person paid,
+// settled = settlement payments they made, trips = distinct trips they appear in.
+const resolveTier = (added: number, settled: number, trips: number): Tier => {
+  if (added >= 10 && settled >= 3) return { name: 'Cosmic Legend', color: '#FFC46B' };
+  if (added >= 6 || trips >= 3) return { name: 'Initiator', color: '#B79CFF' };
+  if (added >= 3) return { name: 'Controller', color: '#5EE6FF' };
+  if (settled >= 2) return { name: 'Peacemaker', color: '#6FE29B' };
+  if (added >= 1 || trips >= 1) return { name: 'Explorer', color: '#FFB74D' };
+  return { name: 'Newbie', color: '#9AA3B2' };
+};
+
+export const LeaderboardSidebar = ({ open, onClose, myName }: Props) => {
+  const expenses = useExpense();
+  const splits = useExpenseSplit();
+  const allUsers = useUser();
+  const userDevices = useUserDevice();
+  const myTrips = useTrip();
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Derive my score
-  let created = 0;
-  try { created = Number(localStorage.getItem('simpli_trips_created')) || 0; } catch {}
-  let myScore = (created * 1000) + (tripsCount * 500) + 1200; // Base score + bonuses
-  
-  // Resolve my tier
-  let myTier = 'Newbie';
-  let myColor = '#a3b1c6';
-  if (myScore >= 9000) { myTier = 'Cosmic Legend'; myColor = '#FFC46B'; }
-  else if (myScore >= 7000) { myTier = 'Initiator'; myColor = '#9d8cdb'; }
-  else if (myScore >= 5000) { myTier = 'Controller'; myColor = '#6bc7ff'; }
-  else if (myScore >= 3000) { myTier = 'Peacemaker'; myColor = '#76e5b1'; }
-  else if (myScore >= 1000) { myTier = 'Explorer'; myColor = '#d98a6c'; }
+  const rows = useMemo(() => {
+    const me = norm(StDB.getLocalId() ?? '');
+    const nameMap = resolveNames(allUsers, userDevices);
+    const tripIds = new Set(myTrips.map(t => t.id));
+    const mine = expenses.filter(e => tripIds.has(e.tripId));
 
-  const allUsers = [...mockUsers, { name: profile.name + ' (You)', tier: myTier, score: myScore, color: myColor, isMe: true }].sort((a, b) => b.score - a.score);
+    type Stat = { id: string; added: number; settled: number; trips: Set<string> };
+    const stats = new Map<string, Stat>();
+    const ensure = (id: string): Stat => {
+      let s = stats.get(id);
+      if (!s) { s = { id, added: 0, settled: 0, trips: new Set() }; stats.set(id, s); }
+      return s;
+    };
+
+    // Always include me so I always appear on the board.
+    ensure(me);
+
+    mine.forEach(exp => {
+      const payer = norm(exp.payerId);
+      const isSettle = (exp.description || '') === 'Debt settlement';
+      const ps = ensure(payer);
+      ps.trips.add(exp.tripId);
+      if (isSettle) ps.settled += 1; else ps.added += 1;
+      splits.filter(s => s.expenseId === exp.id).forEach(s => {
+        const d = ensure(norm(s.debtorId));
+        d.trips.add(exp.tripId);
+      });
+    });
+
+    const list = [...stats.values()].map(s => {
+      const trips = s.trips.size;
+      const score = 100 + s.added * 150 + s.settled * 250 + trips * 200;
+      const tier = resolveTier(s.added, s.settled, trips);
+      const isMe = s.id === me;
+      const baseName = isMe ? (myName || 'You') : (nameMap.get(s.id) || 'Member');
+      return { id: s.id, name: isMe ? `${baseName} (You)` : baseName, score, tier, isMe };
+    });
+
+    list.sort((a, b) => b.score - a.score || (a.isMe ? -1 : 1));
+    return list;
+  }, [expenses, splits, allUsers, userDevices, myTrips, myName]);
+
+  const solo = rows.length <= 1;
 
   return (
     <AnimatePresence>
@@ -55,24 +98,24 @@ export const LeaderboardSidebar = ({ open, onClose, profile, tripsCount }: Props
             }}
           />
           <motion.div
-            initial={{ x: '100%' }}
+            initial={{ x: '-100%' }}
             animate={{ x: 0 }}
-            exit={{ x: '100%' }}
+            exit={{ x: '-100%' }}
             transition={{ type: 'spring', damping: 24, stiffness: 200 }}
             style={{
-              position: 'fixed', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: 400,
-              background: 'rgba(5,6,10,0.95)', borderLeft: '1px solid var(--glass-brd)',
+              position: 'fixed', top: 0, left: 0, bottom: 0, width: '100%', maxWidth: 400,
+              background: 'rgba(5,6,10,0.95)', borderRight: '1px solid var(--glass-brd)',
               zIndex: 91, display: 'flex', flexDirection: 'column',
-              boxShadow: '-20px 0 80px rgba(0,0,0,0.6)',
+              boxShadow: '20px 0 80px rgba(0,0,0,0.6)',
               backdropFilter: 'blur(30px)', WebkitBackdropFilter: 'blur(30px)',
             }}
           >
             <div style={{ padding: '32px 24px 24px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h2 className="font-clash" style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0, color: 'var(--text)' }}>Leaderboard</h2>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginTop: 4 }}>See how you rank in the universe</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', marginTop: 4 }}>Your universe, ranked</div>
               </div>
-              <button onClick={onClose} style={{
+              <button onClick={onClose} aria-label="Close leaderboard" style={{
                 background: 'rgba(255,255,255,0.06)', border: '1px solid var(--glass-brd)',
                 color: 'var(--text)', width: 40, height: 40, borderRadius: '50%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
@@ -81,11 +124,16 @@ export const LeaderboardSidebar = ({ open, onClose, profile, tripsCount }: Props
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {allUsers.map((u, i) => (
-                <div key={i} style={{
+              {solo ? (
+                <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--text-dim)', padding: '40px 16px', lineHeight: 1.6 }}>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>Your board is just getting started</div>
+                  Invite friends to a galaxy and start splitting expenses. As people add and settle, they climb the ranks here.
+                </div>
+              ) : rows.map((u, i) => (
+                <div key={u.id} style={{
                   display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: 16,
-                  background: u.isMe ? `linear-gradient(90deg, ${u.color}15, rgba(5,6,10,0))` : 'rgba(255,255,255,0.02)',
-                  border: `1px solid ${u.isMe ? u.color + '40' : 'var(--glass-brd)'}`,
+                  background: u.isMe ? `linear-gradient(90deg, ${u.tier.color}15, rgba(5,6,10,0))` : 'rgba(255,255,255,0.02)',
+                  border: `1px solid ${u.isMe ? u.tier.color + '40' : 'var(--glass-brd)'}`,
                 }}>
                   <div style={{
                     width: 32, fontSize: '1.2rem', fontWeight: 700, color: i < 3 ? '#FFC46B' : 'var(--text-dim)',
@@ -93,20 +141,20 @@ export const LeaderboardSidebar = ({ open, onClose, profile, tripsCount }: Props
                   }}>
                     #{i + 1}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '1.05rem', fontWeight: u.isMe ? 700 : 500, color: 'var(--text)' }}>{u.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: u.color, marginTop: 4, fontWeight: 600 }}>{u.tier}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '1.05rem', fontWeight: u.isMe ? 700 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
+                    <div style={{ fontSize: '0.8rem', color: u.tier.color, marginTop: 4, fontWeight: 600 }}>{u.tier.name}</div>
                   </div>
                   <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
-                    {u.score.toLocaleString()}
+                    {u.score.toLocaleString('en-IN')}
                   </div>
                 </div>
               ))}
             </div>
-            
+
             <div style={{ padding: 24, borderTop: '1px solid var(--glass-brd)' }}>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.5 }}>
-                Scores are determined by trips created, joined, and expenses settled. Keep exploring to climb the ranks!
+                Settle more expenses to climb the ladder and unlock new tiers.
               </div>
             </div>
           </motion.div>
