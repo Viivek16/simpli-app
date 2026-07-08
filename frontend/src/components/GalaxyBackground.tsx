@@ -322,7 +322,8 @@ const CameraAnimator = ({
     
     // Gentle FOV settle: no punch, no wobble. Camera does a single clean dolly.
     const pCam = camera as THREE.PerspectiveCamera;
-    pCam.fov = THREE.MathUtils.lerp(startFov.current, 50, e);
+    const fovTarget = (typeof window !== 'undefined' && window.innerWidth <= 768) ? 70 : 50;
+    pCam.fov = THREE.MathUtils.lerp(startFov.current, fovTarget, e);
     pCam.updateProjectionMatrix();
   });
 
@@ -354,20 +355,21 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
     if (activeTripId) {
       const activeTripIndex = trips.findIndex(t => t.id === activeTripId);
       const angle = (activeTripIndex / Math.max(trips.length, 1)) * Math.PI * 2;
-      const r = Math.max(6.5, 5 + trips.length * 1.0);
-      const pos = new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
       const isPhone = typeof window !== 'undefined' && window.innerWidth <= 768;
-      // On phones, sit further back so every member star fits without a pinch-zoom out.
+      const r = isPhone ? Math.max(5, 3.4 + trips.length * 0.75) : Math.max(6.5, 5 + trips.length * 1.0);
+      const pos = new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
+      // Phones use a wider field of view (set in CameraAnimator and on the Canvas), so a gentle
+      // pull-back frames the whole constellation without the user pinch-zooming out.
       targetPos.current = isPhone
-        ? new THREE.Vector3(pos.x, pos.y + 5, pos.z + 19)
+        ? new THREE.Vector3(pos.x, pos.y + 4, pos.z + 14)
         : new THREE.Vector3(pos.x, pos.y + 4, pos.z + 12);
       setSettling(true); setSettled(false);
       const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
     } else {
       const isPhone = typeof window !== 'undefined' && window.innerWidth <= 768;
-      // Phones frame all galaxies inside the smaller viewport.
-      targetPos.current = isPhone ? new THREE.Vector3(0, 7, 24) : new THREE.Vector3(0, 6, 16);
+      // Phones frame all galaxies inside the smaller viewport (wider fov + gentle pull-back).
+      targetPos.current = isPhone ? new THREE.Vector3(0, 7, 26) : new THREE.Vector3(0, 6, 16);
       setSettling(true); setSettled(false);
       const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
       return () => clearTimeout(t);
@@ -378,7 +380,8 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
   const tripPositions = useMemo(() => {
     return trips.map((trip, idx) => {
       const angle = (idx / Math.max(trips.length, 1)) * Math.PI * 2;
-      const r = Math.max(6.5, 5 + trips.length * 1.0);
+      const isPhone = typeof window !== 'undefined' && window.innerWidth <= 768;
+      const r = isPhone ? Math.max(5, 3.4 + trips.length * 0.75) : Math.max(6.5, 5 + trips.length * 1.0);
       return {
         trip,
         pos: new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r),
@@ -536,7 +539,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
     }}>
       <ErrorBoundary fallback={<CosmosFallback trips={trips} onSelectTrip={onSelectTrip} />}>
         <Canvas
-          camera={{ position: (typeof window !== 'undefined' && window.innerWidth <= 768) ? [0, 12, 34] : [0, 11, 27], fov: 50 }}
+          camera={{ position: (typeof window !== 'undefined' && window.innerWidth <= 768) ? [0, 11, 36] : [0, 11, 27], fov: (typeof window !== 'undefined' && window.innerWidth <= 768) ? 70 : 50 }}
           dpr={[1, 1.5]}
           frameloop={uiPaused ? 'never' : 'always'}
           style={{ pointerEvents: uiPaused ? 'none' : 'all' }}
