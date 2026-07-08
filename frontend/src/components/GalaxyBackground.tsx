@@ -408,8 +408,13 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
         makeDefault
         enablePan={false} enableRotate enableZoom
         enableDamping dampingFactor={0.06}
-        autoRotate={!activeTripId && !uiPaused} autoRotateSpeed={0.3}
-        minDistance={4} maxDistance={typeof window !== 'undefined' && window.innerWidth <= 768 ? 70 : 140}
+        autoRotate={!activeTripId && !uiPaused && !(typeof window !== 'undefined' && window.innerWidth <= 768)} autoRotateSpeed={0.3}
+        minDistance={(typeof window !== 'undefined' && window.innerWidth <= 768) ? (activeTripId ? 5 : 6) : 4}
+        maxDistance={(typeof window !== 'undefined' && window.innerWidth <= 768) ? (activeTripId ? 60 : 42) : 140}
+        minPolarAngle={(typeof window !== 'undefined' && window.innerWidth <= 768) && !activeTripId ? 0.7 : 0}
+        maxPolarAngle={(typeof window !== 'undefined' && window.innerWidth <= 768) && !activeTripId ? 1.35 : Math.PI}
+        minAzimuthAngle={(typeof window !== 'undefined' && window.innerWidth <= 768) && !activeTripId ? -0.6 : -Infinity}
+        maxAzimuthAngle={(typeof window !== 'undefined' && window.innerWidth <= 768) && !activeTripId ? 0.6 : Infinity}
       />
 
       {/* Camera fly-in: only runs during settle window */}
