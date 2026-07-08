@@ -96,6 +96,7 @@ const TripRoom = ({
   const [showDeleteTrip, setShowDeleteTrip] = useState(false);
   const [deleteExpenseLoading, setDeleteExpenseLoading] = useState<string | null>(null);
   const [mobileLedgerOpen, setMobileLedgerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
   const [settlePayload, setSettlePayload] = useState<{ payerId: string; payeeId: string; amount: number } | null>(null);
 
   useEffect(() => {
@@ -103,6 +104,12 @@ const TripRoom = ({
     else document.body.classList.remove('bottom-sheet-open');
     return () => document.body.classList.remove('bottom-sheet-open');
   }, [mobileLedgerOpen]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const expenses = useExpense();
   const splits = useExpenseSplit();
@@ -365,8 +372,8 @@ const TripRoom = ({
     >
       {/* Top bar */}
       <div style={{
-        pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: '16px',
-        padding: '16px 24px',
+        pointerEvents: 'all', display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '16px',
+        padding: isMobile ? '14px 14px' : '16px 24px',
         background: 'linear-gradient(to bottom, rgba(2,5,8,0.92) 0%, rgba(2,5,8,0) 100%)',
       }}>
         <div onClick={onBack} title="Back to cosmos" style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', transition: 'opacity 0.2s' }}
@@ -430,13 +437,56 @@ const TripRoom = ({
         <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', marginLeft: '8px', cursor: 'pointer' }} />
       </div>
 
+      {/* Mobile balance status bar: always-visible trip balance, tap to open the ledger sheet */}
+      {isMobile && (
+        <button
+          onClick={() => setMobileLedgerOpen(true)}
+          style={{
+            pointerEvents: 'all', margin: '2px 16px 0', textAlign: 'left', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+            padding: '12px 16px', borderRadius: '14px',
+            background: 'rgba(5,6,10,0.72)', border: '1px solid var(--glass-brd)',
+            backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
+          }}
+        >
+          <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+            <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Your balance</span>
+            <span className="money" style={{ fontSize: '1.05rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: Math.abs(myBalances.net) < 0.5 ? 'var(--text-dim)' : myBalances.net > 0 ? 'var(--owed)' : 'var(--owe)' }}>
+              {Math.abs(myBalances.net) < 0.5 ? 'All settled up' : myBalances.net > 0 ? `You're owed ${INR(Math.abs(myBalances.net))}` : `You owe ${INR(Math.abs(myBalances.net))}`}
+            </span>
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)' }}>
+            Ledger
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+          </span>
+        </button>
+      )}
+
+      {/* Tap-to-dismiss backdrop behind the mobile ledger sheet */}
+      {isMobile && mobileLedgerOpen && (
+        <div
+          onClick={() => setMobileLedgerOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 19, pointerEvents: 'all',
+            background: 'rgba(2,4,8,0.45)', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)',
+          }}
+        />
+      )}
+
       {/* Bottom Actions */}
-      <div style={{
+      <div style={isMobile ? {
+        position: 'absolute', left: '16px', right: '16px', pointerEvents: 'all',
+        bottom: mobileLedgerOpen ? 'calc(62vh + 16px)' : 'calc(20px + env(safe-area-inset-bottom))',
+        display: 'flex', alignItems: 'center', gap: '10px', zIndex: 20,
+        transition: 'bottom 0.4s cubic-bezier(0.32,0.72,0,1)'
+      } : {
         position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'all',
         display: 'flex', alignItems: 'center', gap: '12px', zIndex: 20
       }}>
         <button onClick={copyInvite} className="btn-secondary" style={{ 
-          padding: '0', height: '48px', borderRadius: '12px', minWidth: '160px',
+          padding: '0', height: '48px', borderRadius: '12px',
+          minWidth: isMobile ? 0 : '160px', flex: isMobile ? 1 : 'none',
           background: 'var(--glass)', border: '1px solid rgba(255,255,255,0.14)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           color: '#ffffff', fontSize: '0.95rem', fontWeight: 600
@@ -447,7 +497,8 @@ const TripRoom = ({
         </button>
 
         <button onClick={() => { AudioService.playBlip(); setEditPayload(null); setShowModal(true); }} className="btn-primary" style={{ 
-          padding: '0', height: '48px', borderRadius: '12px', minWidth: '160px',
+          padding: '0', height: '48px', borderRadius: '12px',
+          minWidth: isMobile ? 0 : '160px', flex: isMobile ? 1.3 : 'none',
           background: 'linear-gradient(180deg, #FFC46B, #E8963A)', border: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           color: '#ffffff', fontSize: '0.95rem', fontWeight: 600, boxShadow: '0 6px 18px rgba(232,150,58,0.35)'
@@ -457,13 +508,7 @@ const TripRoom = ({
         </button>
       </div>
 
-      <button 
-        className="glass-pill mobile-ledger-btn"
-        onClick={() => setMobileLedgerOpen(true)}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        Ledger
-      </button>
+      {/* Mobile ledger access is on the balance status bar under the header now. */}
 
       {/* Right panel — Ledger */}
       <div className={`glass-panel right-panel-glass ${mobileLedgerOpen ? 'mobile-open' : ''}`} style={{
