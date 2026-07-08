@@ -902,6 +902,7 @@ const TripRoom = ({
                 </>
               )}
               {selectedMemberId === localId && (
+                <>
                   <div style={{ marginTop: '8px', fontSize: '0.85rem', color: 'var(--text-dim)' }}>Total Net Balance</div>
                   <div className="money" style={{ fontSize: '1.4rem', fontWeight: 700, color: headerContext.amount === 0 ? 'var(--text-dim)' : (headerContext.amount > 0 ? 'var(--owed)' : 'var(--owe)') }}>
                     {headerContext.amount === 0 ? INR(0) : (headerContext.amount > 0 ? `You're owed ${INR(Math.abs(headerContext.amount))}` : `You owe ${INR(Math.abs(headerContext.amount))}`)}
