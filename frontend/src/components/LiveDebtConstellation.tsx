@@ -280,7 +280,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
         const shellColor = settled ? '#8b93a3' : color;
         const shellStrength = settled ? 0.24 : (0.35 + debtRatio * 0.5);
 
-        const labelColor = settled ? '#6b7280' : '#FF8A6B';
+        const labelColor = settled ? '#6b7280' : (node.netDebt > 0 ? 'var(--owed)' : 'var(--owe)');
         const isSelected = selectedMemberId === node.id;
 
         return (

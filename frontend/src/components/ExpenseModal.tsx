@@ -60,6 +60,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
   const [err, setErr] = useState<string | null>(null);
 
   const localId = norm(StDB.getLocalId() ?? '');
+  const [payerId, setPayerId] = useState(() => editExpense ? norm(editExpense.payerId) : localId);
 
   // Selected participants (default: all members)
   const [selected, setSelected] = useState<Set<string>>(() => {
@@ -127,7 +128,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
     if (!c) { setErr('Not connected.'); return; }
 
     const splitsArr = buildSplitsArr();
-    const splitsJson = JSON.stringify(splitsArr);
+    const splitsJson = JSON.stringify({ payer_id: payerId, splits: splitsArr });
 
     setLoading(true);
     try {
@@ -246,6 +247,30 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
           <input id={`${uid}-a`} type="number" min="0.01" step="0.01" value={amt}
             onChange={e => setAmt(e.target.value)} placeholder="0.00" style={S.input} className="money" />
         </div>
+
+        {/* Paid By (show unless personal) */}
+        {mode !== 'personal' && tripMembers.length > 0 && (
+          <div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 600 }}>Paid by</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
+              {tripMembers.map(m => (
+                <button key={'payer-' + m.id} type="button" onClick={() => setPayerId(m.id)} style={{
+                  padding: '6px 14px', borderRadius: '12px',
+                  border: '1px solid',
+                  borderColor: payerId === m.id ? 'var(--owed)' : 'var(--glass-brd)',
+                  background: payerId === m.id ? 'rgba(111,186,138,0.1)' : 'transparent',
+                  color: payerId === m.id ? 'var(--text)' : 'var(--text-dim)',
+                  fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'all var(--dur-micro) ease',
+                  display: 'flex', alignItems: 'center', gap: '6px'
+                }}>
+                  {payerId === m.id && <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--owed)' }}>✓</span>}
+                  {m.id === localId ? 'You' : m.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Participants (show unless personal) */}
         {mode !== 'personal' && tripMembers.length > 0 && (

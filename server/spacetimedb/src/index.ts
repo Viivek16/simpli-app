@@ -135,7 +135,18 @@ export const addExpense = spacetimedb.reducer(
     const device = ctx.db.user_device.device_identity.find(ctx.sender.toHexString());
     const user_id = device ? device.google_sub : ctx.sender.toHexString();
 
-    const parsedSplits = JSON.parse(splits) as { debtor_id: string; amount_owed: number }[];
+    let payer_id = user_id;
+    let parsedSplits: { debtor_id: string; amount_owed: number }[] = [];
+    try {
+      const p = JSON.parse(splits);
+      if (p && typeof p === 'object' && !Array.isArray(p) && p.splits) {
+        payer_id = p.payer_id || user_id;
+        parsedSplits = p.splits;
+      } else {
+        parsedSplits = p;
+      }
+    } catch(e) {}
+
     let sum = 0;
     for (const split of parsedSplits) {
       sum += split.amount_owed;
@@ -148,7 +159,7 @@ export const addExpense = spacetimedb.reducer(
     ctx.db.expense.insert({
       id: expense_id,
       trip_id,
-      payer_id: user_id,
+      payer_id,
       amount,
       description,
       timestamp: ctx.timestamp
@@ -223,7 +234,18 @@ export const updateExpense = spacetimedb.reducer(
     if (!exp) throw new Error("Expense not found");
     requireMember(ctx, exp.trip_id);
 
-    const parsed = JSON.parse(splits) as { debtor_id: string; amount_owed: number }[];
+    let payer_id = exp.payer_id;
+    let parsed: { debtor_id: string; amount_owed: number }[] = [];
+    try {
+      const p = JSON.parse(splits);
+      if (p && typeof p === 'object' && !Array.isArray(p) && p.splits) {
+        payer_id = p.payer_id || exp.payer_id;
+        parsed = p.splits;
+      } else {
+        parsed = p;
+      }
+    } catch(e) {}
+
     let sum = 0;
     for (const s of parsed) sum += s.amount_owed;
     if (parsed.length > 0 && Math.abs(sum - amount) > 0.0001) {
@@ -243,7 +265,7 @@ export const updateExpense = spacetimedb.reducer(
     ctx.db.expense.insert({
       id: exp.id,
       trip_id: exp.trip_id,
-      payer_id: exp.payer_id,
+      payer_id,
       amount,
       description,
       timestamp: exp.timestamp,
