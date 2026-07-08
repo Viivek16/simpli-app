@@ -21,6 +21,7 @@ import { LeaderboardSidebar } from './components/LeaderboardSidebar';
 import { ProfileModal } from './components/ProfileModal';
 import { SettleModal } from './components/SettleModal';
 import { NotificationsManager } from './components/NotificationsManager';
+import { selfDeletedTrips } from './notifications';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster, toast } from './components/Toast';
 import { AudioService } from './audio';
@@ -145,7 +146,6 @@ const TripRoom = ({
     if (!c) return;
     const onDel = (row: any) => {
       if (row?.id === trip.id) {
-        toast.info(`"${trip.name}" was deleted`);
         onBack();
       }
     };
@@ -197,6 +197,7 @@ const TripRoom = ({
   const handleDeleteTrip = async () => {
     const c = StDB.conn as any;
     try {
+      selfDeletedTrips.add(trip.id);
       await c.reducers.deleteTrip({ tripId: trip.id });
       AudioService.playBlip();
       toast.success(`"${trip.name}" deleted`);

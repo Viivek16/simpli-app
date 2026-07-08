@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as StDB from '../spacetimedb';
-import { showAppNotification, requestNotificationPermission, notificationsSupported } from '../notifications';
+import { showAppNotification, requestNotificationPermission, notificationsSupported, selfDeletedTrips } from '../notifications';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 const first = (name: string) => (name || 'Someone').split(' ')[0];
@@ -21,6 +21,8 @@ export const NotificationsManager = () => {
   const readyRef = useRef(false);
   const seenExpense = useRef<Set<string>>(new Set());
   const seenMember = useRef<Set<string>>(new Set());
+  const tripNames = useRef<Map<string, string>>(new Map());
+  const myTripIds = useRef<Set<string>>(new Set());
   const attachedRef = useRef(false);
   const [showBanner, setShowBanner] = useState(false);
 
@@ -61,6 +63,9 @@ export const NotificationsManager = () => {
     const seed = (c: any) => {
       seenExpense.current = new Set([...c.db.expense.iter()].map((e: any) => e.id));
       seenMember.current = new Set([...c.db.trip_member.iter()].map((m: any) => `${mTrip(m)}::${mUser(m)}`));
+      tripNames.current = new Map([...c.db.trip.iter()].map((t: any) => [t.id, t.name || 'a group']));
+      const meSeed = norm(StDB.getLocalId());
+      myTripIds.current = new Set([...c.db.trip_member.iter()].filter((m: any) => mUser(m) === meSeed).map((m: any) => mTrip(m)));
     };
 
     const onMemberInsert = (_ctx: any, row: any) => {
@@ -72,7 +77,13 @@ export const NotificationsManager = () => {
       if (seenMember.current.has(key)) return;
       seenMember.current.add(key);
       const me = norm(StDB.getLocalId());
-      if (uid === me) return;
+      if (uid === me) {
+        myTripIds.current.add(tripId);
+        // Someone added me to an existing group (2+ members). Creating my own group (only me) stays silent.
+        const memberCount = [...c.db.trip_member.iter()].filter((m: any) => mTrip(m) === tripId).length;
+        if (memberCount >= 2) showAppNotification(`You've been added to ${tripNameOf(c, tripId)}`);
+        return;
+      }
       if (!iAmMember(c, tripId)) return;
       showAppNotification(`${first(nameOf(c, uid))} joined ${tripNameOf(c, tripId)}`);
     };
@@ -117,12 +128,28 @@ export const NotificationsManager = () => {
       }, 180);
     };
 
+    const onTripInsert = (_ctx: any, row: any) => {
+      tripNames.current.set(row.id, row.name || 'a group');
+    };
+    const onTripDelete = (_ctx: any, row: any) => {
+      const name = tripNames.current.get(row.id) || row.name || 'A group';
+      const wasMember = myTripIds.current.has(row.id);
+      tripNames.current.delete(row.id);
+      myTripIds.current.delete(row.id);
+      if (!readyRef.current) return;
+      if (selfDeletedTrips.has(row.id)) { selfDeletedTrips.delete(row.id); return; }
+      if (!wasMember) return;
+      showAppNotification(`${name} was removed`);
+    };
+
     const attach = (c: any) => {
       if (!c || attachedRef.current) return;
       attachedRef.current = true;
       c.db.trip_member.onInsert(onMemberInsert);
       c.db.expense.onInsert(onExpenseInsert);
       c.db.expense.onDelete(onExpenseDelete);
+      c.db.trip.onInsert(onTripInsert);
+      c.db.trip.onDelete(onTripDelete);
     };
 
     const markReady = () => {
@@ -150,6 +177,8 @@ export const NotificationsManager = () => {
           c.db.trip_member.removeOnInsert(onMemberInsert);
           c.db.expense.removeOnInsert(onExpenseInsert);
           c.db.expense.removeOnDelete(onExpenseDelete);
+          c.db.trip.removeOnInsert(onTripInsert);
+          c.db.trip.removeOnDelete(onTripDelete);
         } catch {}
         attachedRef.current = false;
       }

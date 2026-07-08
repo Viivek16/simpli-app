@@ -3,6 +3,9 @@ import { toast } from './components/Toast';
 export const notificationsSupported = (): boolean =>
   typeof window !== 'undefined' && 'Notification' in window;
 
+// Trip ids the local user is deleting, so the notifier can skip a duplicate message for the actor.
+export const selfDeletedTrips = new Set<string>();
+
 export const requestNotificationPermission = async (): Promise<boolean> => {
   if (!notificationsSupported()) return false;
   try {
