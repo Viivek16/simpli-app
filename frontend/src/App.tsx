@@ -347,8 +347,8 @@ const TripRoom = ({
     const memberName = (userMap.get(selectedMemberId) || 'Member').split(' ')[0];
     const withMe = pairNet(owes, localId, selectedMemberId); // >0 they owe me, <0 I owe them
     if (Math.abs(withMe) > 0.5) {
-      if (withMe > 0) return { text: `${memberName} owes you`, amount: withMe, isDebt: true, withMe: true, dir: 'theyOweMe' as const };
-      return { text: `You owe ${memberName}`, amount: -withMe, isDebt: false, withMe: true, dir: 'iOweThem' as const };
+      if (withMe > 0) return { text: `${memberName} owes you`, amount: withMe, isDebt: true, withMe: true, dir: 'theyOweMe' as const, payerId: selectedMemberId, payeeId: localId };
+      return { text: `You owe ${memberName}`, amount: -withMe, isDebt: false, withMe: true, dir: 'iOweThem' as const, payerId: localId, payeeId: selectedMemberId };
     }
     let best: { otherId: string; amount: number; selectedOwes: boolean } | null = null;
     let bestAbs = 0.5;
@@ -358,10 +358,10 @@ const TripRoom = ({
       if (Math.abs(a) > bestAbs) { bestAbs = Math.abs(a); best = { otherId: m.id, amount: Math.abs(a), selectedOwes: a < 0 }; }
     });
     const chosen = best as { otherId: string; amount: number; selectedOwes: boolean } | null;
-    if (!chosen) return { text: 'Settled up with you', amount: 0, isDebt: false, withMe: false, dir: 'settled' as const };
+    if (!chosen) return { text: 'Settled up with you', amount: 0, isDebt: false, withMe: false, dir: 'settled' as const, payerId: '', payeeId: '' };
     const otherName = (userMap.get(chosen.otherId) || 'Member').split(' ')[0];
-    if (chosen.selectedOwes) return { text: `${memberName} owes ${otherName}`, amount: chosen.amount, isDebt: true, withMe: false, dir: 'thirdParty' as const };
-    return { text: `${otherName} owes ${memberName}`, amount: chosen.amount, isDebt: false, withMe: false, dir: 'thirdParty' as const };
+    if (chosen.selectedOwes) return { text: `${memberName} owes ${otherName}`, amount: chosen.amount, isDebt: true, withMe: false, dir: 'thirdParty' as const, payerId: selectedMemberId, payeeId: chosen.otherId };
+    return { text: `${otherName} owes ${memberName}`, amount: chosen.amount, isDebt: false, withMe: false, dir: 'thirdParty' as const, payerId: chosen.otherId, payeeId: selectedMemberId };
   }, [selectedMemberId, localId, owes, tripMembers, userMap]);
 
   return (
@@ -910,14 +910,11 @@ const TripRoom = ({
                 </>
               )}
             </div>
-            {selectedMemberId !== localId && starDebt && starDebt.withMe && starDebt.amount > 0.5 && (
+            {selectedMemberId !== localId && starDebt && starDebt.dir !== 'settled' && starDebt.amount > 0.5 && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  const iOwe = starDebt.dir === 'iOweThem';
-                  const payerId = iOwe ? localId : selectedMemberId;
-                  const payeeId = iOwe ? selectedMemberId : localId;
-                  setSettlePayload({ payerId, payeeId, amount: Math.round(starDebt.amount) });
+                  setSettlePayload({ payerId: starDebt.payerId, payeeId: starDebt.payeeId, amount: Math.round(starDebt.amount) });
                   onStarClick(null);
                 }}
                 className="btn-primary"
