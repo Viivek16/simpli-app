@@ -453,7 +453,7 @@ const TripRoom = ({
         >
           <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
             <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Your balance</span>
-            <span className="money" style={{ fontSize: '1.05rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: Math.abs(myBalances.net) < 0.5 ? 'var(--text-dim)' : 'var(--owe)' }}>
+            <span className="money" style={{ fontSize: '1.05rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: Math.abs(myBalances.net) < 0.5 ? 'var(--text-dim)' : (myBalances.net > 0 ? 'var(--owed)' : 'var(--owe)') }}>
               {Math.abs(myBalances.net) < 0.5 ? 'All settled up' : myBalances.net > 0 ? `You're owed ${INR(Math.abs(myBalances.net))}` : `You owe ${INR(Math.abs(myBalances.net))}`}
             </span>
           </span>
@@ -536,7 +536,7 @@ const TripRoom = ({
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
             </button>
           </div>
-          <div className="money" style={{ fontSize: '1.2rem', fontWeight: 600, color: headerContext.amount === 0 ? 'var(--text-dim)' : 'var(--owe)' }}>
+          <div className="money" style={{ fontSize: '1.2rem', fontWeight: 600, color: headerContext.amount === 0 ? 'var(--text-dim)' : (headerContext.amount > 0 ? 'var(--owed)' : 'var(--owe)') }}>
             {headerContext.amount === 0 ? (headerContext.type === 'overall' ? 'Settled up' : `Settled with ${headerContext.name}`) : (headerContext.amount > 0 ? (headerContext.type === 'overall' ? `You're owed ${INR(Math.abs(headerContext.amount))}` : `${headerContext.name} owes you ${INR(Math.abs(headerContext.amount))}`) : (headerContext.type === 'overall' ? `You owe ${INR(Math.abs(headerContext.amount))}` : `You owe ${headerContext.name} ${INR(Math.abs(headerContext.amount))}`))}
           </div>
         </div>
@@ -553,7 +553,7 @@ const TripRoom = ({
               const isPositive = d.amount > 0;
               return (
                 <div key={d.otherId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--owe)' }}>
+                  <div style={{ fontSize: '0.85rem', color: isPositive ? 'var(--owed)' : 'var(--owe)' }}>
                     {isPositive ? `${firstName} owes you ${INR(Math.abs(d.amount))}` : `You owe ${firstName} ${INR(Math.abs(d.amount))}`}
                   </div>
                   <button onClick={() => {

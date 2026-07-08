@@ -271,18 +271,14 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
       {nodes.map((node, i) => {
         const isLocal = node.id === localId;
         const settled = Math.abs(node.netDebt) < 0.5;
-        const isOwed = node.netDebt > 0.5;      // creditor: others owe them -> glows
-        const isDebtor = node.netDebt < -0.5;   // they owe others -> dim, no glow
-        const owedRatio = isOwed ? Math.min(node.netDebt / maxNetDebt, 1) : 0;
+        const isDebtInvolved = Math.abs(node.netDebt) > 0.5;
+        const debtRatio = isDebtInvolved ? Math.min(Math.abs(node.netDebt) / maxNetDebt, 1) : 0;
         const color = isLocal ? '#FFB74D' : '#5EE6FF';
 
-        // Glow reflects CREDIT only (money owed TO this person). Debtors stay dim, settled stay grey.
-        const emissiveIntensity = settled ? 0.16 : (isOwed ? (0.55 + owedRatio * 1.3) : 0.30);
+        const emissiveIntensity = settled ? 0.16 : (0.45 + debtRatio * 1.3);
         const coreColor = settled ? '#9aa0aa' : color;
         const shellColor = settled ? '#8b93a3' : color;
-        const shellStrength = settled ? 0.24 : (isOwed ? (0.45 + owedRatio * 0.5) : 0.28);
-        const ringColor = settled ? '#6b7280' : color;
-        const ringOpacity = settled ? 0.5 : (isOwed ? (0.4 + owedRatio * 0.35) : 0.3);
+        const shellStrength = settled ? 0.24 : (0.35 + debtRatio * 0.5);
 
         const labelColor = settled ? '#6b7280' : '#FF8A6B';
         const isSelected = selectedMemberId === node.id;
@@ -306,7 +302,7 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
                 color={coreColor}
                 emissive={coreColor}
                 emissiveIntensity={emissiveIntensity}
-                roughness={settled ? 0.85 : (isDebtor ? 0.45 : 0.08)}
+                roughness={settled ? 0.85 : 0.08}
                 metalness={settled ? 0 : 0.15}
                 toneMapped={false}
                 transparent
@@ -316,42 +312,31 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
             {/* Fresnel atmosphere shell (static, view-dependent limb glow) */}
             <AtmosphereShell color={shellColor} strength={shellStrength} radius={0.62} />
 
-            {/* Premium tilted orbital ring (planet signature; colour + brightness encode state) */}
-            <mesh raycast={() => null} rotation={[Math.PI / 2.15, 0.35, 0]} userData={{ baseOpacity: ringOpacity }}>
-              <torusGeometry args={[0.82, 0.016, 16, 90]} />
-              <meshBasicMaterial color={ringColor} transparent opacity={ringOpacity} toneMapped={false} blending={THREE.AdditiveBlending} depthWrite={false} />
-            </mesh>
-            {/* Soft outer ring for depth */}
-            <mesh raycast={() => null} rotation={[Math.PI / 2.15, 0.35, 0]} userData={{ baseOpacity: ringOpacity * 0.45 }}>
-              <torusGeometry args={[0.99, 0.008, 16, 90]} />
-              <meshBasicMaterial color={ringColor} transparent opacity={ringOpacity * 0.45} toneMapped={false} blending={THREE.AdditiveBlending} depthWrite={false} />
-            </mesh>
-
-            {/* Layered additive halo, only for members who are OWED money (credit glow) */}
-            {isOwed && (
+            {/* Layered additive halo for members involved in debt (intensity proportional to debt) */}
+            {isDebtInvolved && (
               <group>
-                <sprite raycast={() => null} scale={[1.8 + owedRatio * 2.2, 1.8 + owedRatio * 2.2, 1]} userData={{ baseOpacity: 0.12 + owedRatio * 0.16 }}>
+                <sprite raycast={() => null} scale={[1.8 + debtRatio * 2.2, 1.8 + debtRatio * 2.2, 1]} userData={{ baseOpacity: 0.12 + debtRatio * 0.16 }}>
                   <spriteMaterial
                     map={haloTexture}
                     color={color}
-                    transparent opacity={0.12 + owedRatio * 0.16}
+                    transparent opacity={0.12 + debtRatio * 0.16}
                     blending={THREE.AdditiveBlending} depthWrite={false}
                   />
                 </sprite>
-                <sprite raycast={() => null} scale={[3.0 + owedRatio * 3.5, 3.0 + owedRatio * 3.5, 1]} userData={{ baseOpacity: (0.12 + owedRatio * 0.16) * 0.4 }}>
+                <sprite raycast={() => null} scale={[3.0 + debtRatio * 3.5, 3.0 + debtRatio * 3.5, 1]} userData={{ baseOpacity: (0.12 + debtRatio * 0.16) * 0.4 }}>
                   <spriteMaterial
                     map={haloTexture}
                     color={color}
-                    transparent opacity={(0.12 + owedRatio * 0.16) * 0.4}
+                    transparent opacity={(0.12 + debtRatio * 0.16) * 0.4}
                     blending={THREE.AdditiveBlending} depthWrite={false}
                   />
                 </sprite>
               </group>
             )}
 
-            {/* Point light only for glowing (owed) planets */}
-            {isOwed && (
-              <pointLight color={color} intensity={0.5 + owedRatio * 1.5} distance={9} decay={2} />
+            {/* Point light for glowing planets */}
+            {isDebtInvolved && (
+              <pointLight color={color} intensity={0.5 + debtRatio * 1.5} distance={9} decay={2} />
             )}
 
             {/* Label */}
