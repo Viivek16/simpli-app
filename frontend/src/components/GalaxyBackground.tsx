@@ -163,7 +163,7 @@ const SwirlingGalaxy = ({
     
     ref.current.rotation.y += hovered || selected ? 0.002 : 0.0004;
     // settled groups are smaller
-    const targetScale = selected ? 1.4 : (hovered ? 1.06 : (settled ? 0.8 : 1.0));
+    const targetScale = selected ? 1.4 : (hovered ? 1.06 : (settled ? 0.55 : 1.0));
     const targetOpacity = hidden ? 0 : (selected ? 0.0 : (settled ? 0.30 : 0.48));
     
     if (e < 1) {
@@ -180,8 +180,17 @@ const SwirlingGalaxy = ({
     }
   });
 
+  const displayPos = useMemo(() => {
+    if (!settled) return position;
+    const p = position.clone();
+    p.multiplyScalar(1.15);
+    p.z -= 10;
+    p.y += 2.5;
+    return p;
+  }, [position, settled]);
+
   return (
-    <group position={position}>
+    <group position={displayPos}>
       <group ref={ref} rotation={[0.1, 0, -0.1]}>
         <Points
           ref={pointsRef} positions={positions} colors={colors} stride={3} frustumCulled={false}
@@ -238,7 +247,7 @@ const SwirlingGalaxy = ({
                 </div>
               ) : netBalances ? (
                 <>
-                  {netBalances.amtOwed > 0 && <div style={{ color: 'var(--owed)' }}><span style={{ color: 'var(--text-dim)' }}>{netBalances.owed} owes</span> +₹{Math.round(netBalances.amtOwed)}</div>}
+                  {netBalances.amtOwed > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>{netBalances.owed} owes</span> +₹{Math.round(netBalances.amtOwed)}</div>}
                   {netBalances.amtOwes > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>You owe {netBalances.owes}</span> -₹{Math.round(netBalances.amtOwes)}</div>}
                   {netBalances.amtOwed === 0 && netBalances.amtOwes === 0 && <div style={{ color: 'var(--text-dim)' }}>You are settled up</div>}
                 </>
@@ -507,10 +516,12 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
         });
       });
 
+      // Settled from the local user's perspective: no outstanding balance with any member.
       let settled = true;
-      for (const val of Object.values(netUser)) {
-        if (Math.abs(val) > 0.5) settled = false;
-      }
+      Object.keys(netUser).forEach(otherId => {
+        if (otherId === localId) return;
+        if (Math.abs(pairNet(owes, localId, otherId)) > 0.5) settled = false;
+      });
 
       if (settled) {
         res[trip.id] = { settled: true, netBalances: null };
