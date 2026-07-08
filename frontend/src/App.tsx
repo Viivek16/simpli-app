@@ -1177,6 +1177,15 @@ function App() {
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const isConnected = useIsConnected();
   const trips = useTrip();
+  const [cachedTrips] = useState<Trip[]>(() => {
+    try { const raw = localStorage.getItem('simpli_trips_cache'); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  });
+  useEffect(() => {
+    if (subReady) {
+      try { localStorage.setItem('simpli_trips_cache', JSON.stringify(trips.map(t => ({ id: t.id, name: t.name })))); } catch {}
+    }
+  }, [subReady, trips]);
+  const displayTrips = (subReady ? trips : (cachedTrips.length ? cachedTrips : trips)) as Trip[];
 
   const selectTrip = useCallback((t: Trip | null) => {
     if (t) {
@@ -1303,7 +1312,7 @@ function App() {
 
       <ErrorBoundary fallback={<div style={{ position: 'fixed', inset: 0, background: '#020508' }} />}>
         <GalaxyBackground
-          trips={trips}
+          trips={displayTrips}
           activeTripId={selectedTrip?.id ?? null}
           onSelectTrip={selectTrip}
           uiPaused={overlayOpen}
