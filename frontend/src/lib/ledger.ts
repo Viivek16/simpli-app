@@ -1,7 +1,7 @@
 export function pairNet(owes: Record<string, Record<string, number>>, meId: string, otherId: string): number {
   const meOwesOther = (owes[meId] && owes[meId][otherId]) || 0;
   const otherOwesMe = (owes[otherId] && owes[otherId][meId]) || 0;
-  return otherOwesMe - meOwesOther;
+  return Math.round(otherOwesMe - meOwesOther);
 }
 
 export function buildOwesMap(expenses: any[], splits: any[]): Record<string, Record<string, number>> {

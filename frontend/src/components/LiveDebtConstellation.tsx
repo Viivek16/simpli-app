@@ -16,7 +16,7 @@ import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import { useTripMember } from '../hooks/useTrips';
 import * as StDB from '../spacetimedb';
 import { AudioService } from '../audio';
-import { buildOwesMap } from '../lib/ledger';
+import { buildOwesMap, pairNet } from '../lib/ledger';
 
 const INR = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
@@ -115,27 +115,26 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
     return result;
   }, [tripMemberIds, userMap]);
 
-  // Net debt per member from this trip's expenses
-  const netDebts = useMemo(() => {
-    const debts: Record<string, number> = {};
-    members.forEach(m => { debts[m.id] = 0; });
-    const tripExpenses = expenses.filter(e => e.tripId === activeTripId);
-    tripExpenses.forEach(exp => {
-      const payerId = norm(exp.payerId);
-      splits.filter(s => s.expenseId === exp.id).forEach(split => {
-        const debtorId = norm(split.debtorId);
-        if (debts[payerId] !== undefined) debts[payerId] += split.amountOwed;
-        if (debts[debtorId] !== undefined) debts[debtorId] -= split.amountOwed;
-      });
-    });
-    return debts;
-  }, [members, splits, expenses, activeTripId]);
-
   // Pairwise owes map: owes[a][b] = a owes b this amount
   const owes = useMemo(() => {
     const tripExpenses = expenses.filter(e => e.tripId === activeTripId);
     return buildOwesMap(tripExpenses, splits);
   }, [splits, expenses, activeTripId]);
+
+  // Net debt per member from this trip's expenses
+  const netDebts = useMemo(() => {
+    const debts: Record<string, number> = {};
+    members.forEach(m => {
+      let net = 0;
+      members.forEach(other => {
+        if (m.id !== other.id) {
+          net += pairNet(owes, m.id, other.id);
+        }
+      });
+      debts[m.id] = net;
+    });
+    return debts;
+  }, [members, owes]);
 
   const maxNetDebt = useMemo(() => {
     let max = 0;
