@@ -14,6 +14,10 @@ interface Props {
 
 const norm = (s: any): string => String(s ?? '').toLowerCase().trim();
 
+// Append an alpha byte to a 6-digit hex color (e.g. '#FFC46B' + 0.4 → '#FFC46B66')
+const hexA = (hex: string, a: number): string =>
+  hex + Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, '0');
+
 type Tier = { name: string; color: string };
 
 // Activity-based tiers, ranked. added = non-settlement expenses this person paid,
@@ -129,27 +133,41 @@ export const LeaderboardSidebar = ({ open, onClose, myName }: Props) => {
                   <div style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>Your board is just getting started</div>
                   Invite friends to a galaxy and start splitting expenses. As people add and settle, they climb the ranks here.
                 </div>
-              ) : rows.map((u, i) => (
-                <div key={u.id} style={{
+              ) : rows.map((u, i) => {
+                // Hierarchy glow: brightest at the top, fading to none by rank ~5.
+                const strength = Math.max(0, 1 - i * 0.24);
+                const glowLo = strength > 0
+                  ? `inset 0 1px 0 var(--glass-hi), 0 0 ${Math.round(7 * strength)}px ${hexA(u.tier.color, 0.10 * strength)}`
+                  : 'none';
+                const glowHi = strength > 0
+                  ? `inset 0 1px 0 var(--glass-hi), 0 0 ${Math.round(22 * strength)}px ${hexA(u.tier.color, 0.42 * strength)}`
+                  : 'none';
+                return (
+                <div key={u.id} className="leader-row" style={{
                   display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: 16,
                   background: u.isMe ? `linear-gradient(90deg, ${u.tier.color}15, rgba(5,6,10,0))` : 'rgba(255,255,255,0.02)',
                   border: `1px solid ${u.isMe ? u.tier.color + '40' : 'var(--glass-brd)'}`,
+                  ['--row-shadow-lo' as string]: glowLo,
+                  ['--row-shadow-hi' as string]: glowHi,
+                  ['--row-delay' as string]: `${(i * 0.18).toFixed(2)}s`,
                 }}>
                   <div style={{
                     width: 32, fontSize: '1.2rem', fontWeight: 700, color: i < 3 ? '#FFC46B' : 'var(--text-dim)',
-                    textAlign: 'center', fontVariantNumeric: 'tabular-nums'
+                    textAlign: 'center', fontVariantNumeric: 'tabular-nums',
+                    textShadow: i < 3 ? `0 0 ${Math.round(12 * strength)}px ${hexA('#FFC46B', 0.6 * strength)}` : 'none',
                   }}>
                     #{i + 1}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '1.05rem', fontWeight: u.isMe ? 700 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: u.tier.color, marginTop: 4, fontWeight: 600 }}>{u.tier.name}</div>
+                    <div style={{ fontSize: '0.8rem', color: u.tier.color, marginTop: 4, fontWeight: 600, textShadow: strength > 0 ? `0 0 ${Math.round(14 * strength)}px ${hexA(u.tier.color, 0.5 * strength)}` : 'none' }}>{u.tier.name}</div>
                   </div>
                   <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
                     {u.score.toLocaleString('en-IN')}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             <div style={{ padding: 24, borderTop: '1px solid var(--glass-brd)' }}>

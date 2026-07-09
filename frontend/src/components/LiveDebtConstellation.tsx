@@ -82,7 +82,7 @@ interface LDCProps {
   onSelectedStarPosUpdate?: (pos: { x: number, y: number } | null) => void;
 }
 
-export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar, onStarHover, onStarClick, selectedMemberId, settling: _settling, onSelectedStarPosUpdate }: LDCProps) => {
+export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, onStarClick, selectedMemberId, settling: _settling, onSelectedStarPosUpdate }: LDCProps) => {
   const allUsers = useUser();
   const tripMemberIds = useTripMember(activeTripId);
   const splits = useExpenseSplit();
@@ -203,8 +203,13 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
       if (child.name === 'star-group') {
         const baseY = child.userData.baseY;
         if (typeof baseY === 'number') child.position.y = baseY + Math.sin(t * 0.9 + child.userData.seed) * 0.25;
-        const s = 1 + Math.sin(t * 0.8 + child.userData.seed) * 0.02;
-        child.scale.setScalar(s);
+        const bob = 1 + Math.sin(t * 0.8 + child.userData.seed) * 0.02;
+        // Hover zoom: the pointed-at planet gently swells, easing back on leave.
+        const target = child.userData.nodeId === hoveredStar ? 1.22 : 1.0;
+        const prev = child.userData.hoverScale ?? 1;
+        const hoverScale = THREE.MathUtils.lerp(prev, target, 0.14);
+        child.userData.hoverScale = hoverScale;
+        child.scale.setScalar(bob * hoverScale);
       }
     });
 
@@ -287,8 +292,8 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar: _hoveredStar,
             {/* Invisible hit target for clicks */}
             <mesh
               onClick={(e) => { e.stopPropagation(); AudioService.playBlip(); onStarClick(node.id); }}
-              onPointerOver={(e) => { e.stopPropagation(); onStarHover(node.id); }}
-              onPointerOut={() => onStarHover(null)}
+              onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer'; onStarHover(node.id); }}
+              onPointerOut={() => { document.body.style.cursor = 'auto'; onStarHover(null); }}
             >
               <sphereGeometry args={[1.1, 16, 16]} />
               <meshBasicMaterial transparent opacity={0} depthWrite={false} />

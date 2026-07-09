@@ -418,12 +418,11 @@ const TripRoom = ({
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         </button>
 
-<button onClick={onOpenLeaderboard} title="Leaderboard" aria-label="Leaderboard" style={{
+<button onClick={onOpenLeaderboard} title="Leaderboard" aria-label="Leaderboard" className="trophy-btn" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           width: 32, height: 32, marginLeft: '12px', padding: 0,
           borderRadius: '50%', cursor: 'pointer',
           background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,196,107,0.25)',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
         }}>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -435,7 +434,7 @@ const TripRoom = ({
             <path d="M17 5h2.5a1.5 1.5 0 0 1 0 5H17M7 5H4.5a1.5 1.5 0 0 0 0 5H7" stroke="url(#trophyGradRoom)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', marginLeft: '8px', cursor: 'pointer' }} />
+        <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" className="profile-avatar" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', marginLeft: '8px', cursor: 'pointer' }} />
       </div>
 
       {/* Mobile balance status bar: always-visible trip balance, tap to open the ledger sheet */}
@@ -995,12 +994,11 @@ const Dashboard = ({
         <div style={{ flex: 1 }} />
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <button onClick={onOpenLeaderboard} title="Leaderboard" aria-label="Leaderboard" style={{
+          <button onClick={onOpenLeaderboard} title="Leaderboard" aria-label="Leaderboard" className="trophy-btn" style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 34, height: 34, padding: 0,
             borderRadius: '50%', cursor: 'pointer',
             background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,196,107,0.25)',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
           }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <defs>
@@ -1012,7 +1010,7 @@ const Dashboard = ({
               <path d="M17 5h2.5a1.5 1.5 0 0 1 0 5H17M7 5H4.5a1.5 1.5 0 0 0 0 5H7" stroke="url(#trophyGradHome)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)', cursor: 'pointer' }} />
+          <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" className="profile-avatar" style={{ width: 34, height: 34, borderRadius: '50%', border: '2px solid var(--glass-brd)', cursor: 'pointer' }} />
         </div>
       </div>
 

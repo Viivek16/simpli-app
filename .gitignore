@@ -3,3 +3,5 @@ dist/
 .env
 .spacetime/
 .DS_Store
+
+.claude/

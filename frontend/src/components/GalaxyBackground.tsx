@@ -84,11 +84,12 @@ const tripColor = (id: string) => PALETTE[hashId(id) % PALETTE.length];
 let sharedGlowTex: THREE.CanvasTexture | null = null;
 
 const SwirlingGalaxy = ({
-  position, colorCoreStr, colorEdgeStr, onClick, name, hovered, selected, hidden, index, settled, netBalances
+  position, colorCoreStr, colorEdgeStr, onClick, name, hovered, selected, hidden, index, settled, netBalances, onHoverChange
 }: {
   position: THREE.Vector3; colorCoreStr: string; colorEdgeStr: string;
   onClick?: () => void; name?: string; hovered?: boolean; selected?: boolean; hidden?: boolean; index: number;
   settled: boolean; netBalances: { owes: string; owed: string; amtOwes: number; amtOwed: number } | null;
+  onHoverChange?: (h: boolean) => void;
 }) => {
   const ref = useRef<THREE.Group>(null);
   const pointsRef = useRef<THREE.Points>(null);
@@ -162,9 +163,9 @@ const SwirlingGalaxy = ({
     }
     
     ref.current.rotation.y += hovered || selected ? 0.002 : 0.0004;
-    // settled groups are smaller
-    const targetScale = selected ? 1.4 : (hovered ? 1.06 : (settled ? 0.55 : 1.0));
-    const targetOpacity = hidden ? 0 : (selected ? 0.0 : (settled ? 0.30 : 0.48));
+    // settled groups are smaller; hover gives a gentle bulge + brightness lift
+    const targetScale = selected ? 1.4 : (hovered ? (settled ? 0.62 : 1.12) : (settled ? 0.55 : 1.0));
+    const targetOpacity = hidden ? 0 : (selected ? 0.0 : (settled ? (hovered ? 0.42 : 0.30) : (hovered ? 0.62 : 0.48)));
     
     if (e < 1) {
       const s = 0.96 + e * (targetScale - 0.96);
@@ -173,8 +174,8 @@ const SwirlingGalaxy = ({
       if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.10 / Math.max(targetOpacity, 0.001));
       if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.035 / Math.max(targetOpacity, 0.001));
     } else {
-      ref.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.04);
-      mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
+      ref.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.09);
+      mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.06);
       if (spriteRef1.current) spriteRef1.current.material.opacity = mat.opacity * (0.10 / Math.max(targetOpacity, 0.001));
       if (spriteRef2.current) spriteRef2.current.material.opacity = mat.opacity * (0.035 / Math.max(targetOpacity, 0.001));
     }
@@ -195,8 +196,8 @@ const SwirlingGalaxy = ({
         <Points
           ref={pointsRef} positions={positions} colors={colors} stride={3} frustumCulled={false}
           onClick={(e) => { if (onClick) { e.stopPropagation(); onClick(); } }}
-          onPointerOver={() => { document.body.style.cursor = 'pointer'; }}
-          onPointerOut={() => { document.body.style.cursor = 'auto'; }}
+          onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer'; onHoverChange?.(true); }}
+          onPointerOut={() => { document.body.style.cursor = 'auto'; onHoverChange?.(false); }}
         >
           <PointMaterial
             transparent vertexColors
@@ -261,9 +262,17 @@ const SwirlingGalaxy = ({
 };
 
 // ─── Background Starfield ───────────────────────────────────────────────────
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string | null; settled: boolean }) => {
   const ref = useRef<THREE.Points>(null);
-  
+  const parallaxRef = useRef<THREE.Group>(null);
+  const enableParallax = useMemo(
+    () => typeof window !== 'undefined' && window.innerWidth > 768 && !prefersReducedMotion(),
+    []
+  );
+
   const { positions, colors } = useMemo(() => {
     const TOTAL = 3500;
     const p = new Float32Array(TOTAL * 3);
@@ -284,7 +293,7 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
     return { positions: p, colors: c };
   }, []);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (!ref.current) return;
     const mat = ref.current.material as THREE.PointsMaterial;
     const targetOpacity = activeTripId ? 0 : 0.22;
@@ -292,14 +301,28 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
     ref.current.rotation.y += delta * 0.018; // slow global drift
     ref.current.rotation.x += delta * 0.004;
 
+    // Cursor "gravity": the cosmos leans away from the pointer, so stars appear to
+    // drift apart around the cursor. Desktop only, damped, reduced-motion aware.
+    if (enableParallax && parallaxRef.current) {
+      const p = state.pointer; // NDC, -1..1
+      const tiltX = -p.y * 0.10;
+      const tiltY = p.x * 0.10;
+      parallaxRef.current.rotation.x = THREE.MathUtils.lerp(parallaxRef.current.rotation.x, tiltX, 0.035);
+      parallaxRef.current.rotation.y = THREE.MathUtils.lerp(parallaxRef.current.rotation.y, tiltY, 0.035);
+      const targetScale = 1 + Math.hypot(p.x, p.y) * 0.02;
+      const s = THREE.MathUtils.lerp(parallaxRef.current.scale.x, targetScale, 0.04);
+      parallaxRef.current.scale.setScalar(s);
+    }
   });
 
   if (activeTripId && settled) return null;
 
   return (
-    <Points ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}>
-      <PointMaterial transparent vertexColors size={0.3} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
-    </Points>
+    <group ref={parallaxRef}>
+      <Points ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}>
+        <PointMaterial transparent vertexColors size={0.3} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
+      </Points>
+    </group>
   );
 };
 
@@ -339,8 +362,6 @@ const CameraAnimator = ({
   return null;
 };
 
-interface HoveredGalaxy { id: string; pos: THREE.Vector3 }
-
 // Wrapper to share state between the canvas and the DOM
 const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, tripBalances, selectedMemberId, onSelectedStarPosUpdate }: {
   activeTripId: string | null;
@@ -354,7 +375,7 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
   selectedMemberId?: string | null;
   onSelectedStarPosUpdate?: (pos: { x: number, y: number } | null) => void;
 }) => {
-  const hoveredGalaxy = null as HoveredGalaxy | null; // phase 2: hover state
+  const [hoveredTripId, setHoveredTripId] = useState<string | null>(null);
   const [settling, setSettling] = useState(false);
   const [settled, setSettled] = useState(false);
   const targetPos = useRef(new THREE.Vector3(0, 16, 36));
@@ -447,10 +468,11 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
               colorCoreStr={cols.core}
               colorEdgeStr={cols.edge}
               name={trip.name}
-              hovered={hoveredGalaxy?.id === trip.id}
+              hovered={hoveredTripId === trip.id}
               selected={activeTripId === trip.id}
               hidden={activeTripId !== null}
               onClick={() => { AudioService.playBlip(); onSelectTrip(trip); }}
+              onHoverChange={activeTripId ? undefined : (h) => setHoveredTripId(h ? trip.id : (prev => prev === trip.id ? null : prev))}
               settled={bal.settled}
               netBalances={bal.netBalances}
             />

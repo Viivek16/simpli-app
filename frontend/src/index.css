@@ -53,6 +53,82 @@ button:focus-visible, input:focus-visible {
   100% { transform: translateY(0); }
 }
 
+/* ───────────────────────────────────────────────────────────────────────────
+   Micro-interactions — subtle, premium hover/glow polish
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Trophy / leaderboard badge: gentle "winning" pulse by default, lifts on hover */
+@keyframes trophyPulse {
+  0%, 100% {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 10px -2px rgba(255,196,107,0.30);
+    border-color: rgba(255,196,107,0.25);
+  }
+  50% {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), 0 0 18px 1px rgba(255,196,107,0.55);
+    border-color: rgba(255,196,107,0.55);
+  }
+}
+.trophy-btn {
+  animation: trophyPulse 2.8s var(--ease-app) infinite;
+  transition: transform var(--dur-micro) var(--ease-app), box-shadow var(--dur-micro) var(--ease-app);
+}
+.trophy-btn svg { transition: transform var(--dur-element) var(--ease-app); }
+@media (hover: hover) {
+  .trophy-btn:hover {
+    animation: none;
+    transform: translateY(-1px) scale(1.08);
+    border-color: rgba(255,196,107,0.7) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 0 24px 3px rgba(255,196,107,0.6);
+  }
+  .trophy-btn:hover svg { transform: scale(1.12) rotate(-7deg); }
+}
+.trophy-btn:active { transform: scale(0.94); }
+
+/* Profile avatar: subtle scale + amber ring on hover */
+.profile-avatar {
+  transition: transform var(--dur-micro) var(--ease-app),
+              box-shadow var(--dur-micro) var(--ease-app),
+              border-color var(--dur-micro) var(--ease-app);
+}
+@media (hover: hover) {
+  .profile-avatar:hover {
+    transform: scale(1.1);
+    border-color: rgba(255,196,107,0.6) !important;
+    box-shadow: 0 0 16px rgba(255,196,107,0.4);
+  }
+}
+.profile-avatar:active { transform: scale(0.95); }
+
+/* Leaderboard rows: hierarchical glow (top = brightest), staggered wave.
+   --row-shadow-lo / --row-shadow-hi / --row-delay are set per-row in JS. */
+@keyframes leaderGlow {
+  0%, 100% { box-shadow: var(--row-shadow-lo, none); }
+  50%      { box-shadow: var(--row-shadow-hi, none); }
+}
+.leader-row {
+  animation: leaderGlow 3.4s var(--ease-app) infinite;
+  animation-delay: var(--row-delay, 0s);
+  transition: transform var(--dur-element) var(--ease-app);
+}
+@media (hover: hover) {
+  .leader-row:hover { transform: translateX(4px); }
+}
+
+/* Generic pressable lift used on chips/icon buttons */
+.lift {
+  transition: transform var(--dur-micro) var(--ease-app), box-shadow var(--dur-micro) var(--ease-app);
+}
+@media (hover: hover) {
+  .lift:hover { transform: translateY(-1px); }
+}
+.lift:active { transform: translateY(1px) scale(0.98); }
+
+/* Respect reduced-motion: kill the ambient/looping animations, keep instant hovers */
+@media (prefers-reduced-motion: reduce) {
+  .trophy-btn, .leader-row { animation: none !important; }
+  .trophy-btn:hover, .profile-avatar:hover, .leader-row:hover, .lift:hover { transform: none; }
+}
+
 /* Glass system utilities */
 .glass-panel {
   background: var(--glass);
