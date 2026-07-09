@@ -209,7 +209,7 @@ const SwirlingGalaxy = ({
       <group ref={ref} rotation={[0.1, 0, -0.1]}>
         <Points
           ref={pointsRef} positions={positions} colors={colors} stride={3} frustumCulled={false}
-          raycast={hidden ? () => null : undefined}
+          {...(hidden ? { raycast: () => null } : {})}
           onClick={(e) => { if (hidden || !onClick) return; e.stopPropagation(); onClick(); }}
           onPointerOver={(e) => { if (hidden) return; e.stopPropagation(); document.body.style.cursor = 'pointer'; onHoverChange?.(true); }}
           onPointerOut={() => { document.body.style.cursor = 'auto'; onHoverChange?.(false); }}
@@ -397,6 +397,7 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
   const [settleDuration, setSettleDuration] = useState(1.0);
   const targetPos = useRef(framePose(ORIGIN, isPhoneNow()));
   const controlsRef = useRef<any>(null);
+  const prevHomeView = useRef<HomeView>(homeView);
 
   // Galaxy layout: active galaxies orbit the origin, settled ones orbit the distant
   // settled sector. One source of truth for both rendering and camera targeting.
@@ -422,9 +423,12 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
     } else {
       // Home: frame the active sector, or zoop across to the settled sector.
       targetPos.current = framePose(homeView === 'settled' ? SETTLED_CENTER : ORIGIN, phone);
-      // The settled sector is a long lateral hop — give it a touch more travel time.
-      dur = homeView === 'settled' ? 1.2 : 1.0;
+      // Any hop to/from the distant settled sector is a long lateral journey — give it a
+      // slower, graceful glide. The plain active-home reveal stays snappy.
+      const isSectorHop = prevHomeView.current !== homeView || homeView === 'settled';
+      dur = isSectorHop ? 2.0 : 1.0;
     }
+    prevHomeView.current = homeView;
     setSettleDuration(dur);
     setSettling(true); setSettled(false);
     const t = setTimeout(() => { setSettling(false); setSettled(true); }, dur * 1000 + 60);
