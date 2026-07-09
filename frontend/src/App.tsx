@@ -13,6 +13,7 @@ import type { Expense, ExpenseSplit } from './module_bindings/types';
 import { useTrip, type Trip } from './hooks/useTrips';
 import { useTripMember } from './hooks/useTrips';
 import { useUserDevice } from './hooks/useUserDevice';
+import { useIsMobile } from './hooks/useIsMobile';
 import { resolveNames } from './lib/names';
 import { buildOwesMap, pairNet } from './lib/ledger';
 import { ExpenseModal } from './components/ExpenseModal';
@@ -52,6 +53,27 @@ const BTN_GHOST: React.CSSProperties = {
   transition: 'background 160ms ease',
   fontFamily: 'inherit',
 };
+
+// ─── Brand wordmark ─────────────────────────────────────────────────────────────
+// "SIMPLI" tracked out to span exactly the width of the "BUILT ON SPACETIMEDB"
+// subtitle beneath it, so the two stacked lines are flush on both edges. The
+// subtitle (nowrap) defines the width; the letters distribute across it via
+// space-between — self-correcting across fonts and viewports, no magic numbers.
+const SIMPLI_LETTERS = ['S', 'I', 'M', 'P', 'L', 'I'];
+const SimpliWordmark = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '2px' }}>
+    <span
+      className="font-clash"
+      aria-label="SIMPLI"
+      style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1 }}
+    >
+      {SIMPLI_LETTERS.map((c, i) => <span key={i} aria-hidden="true">{c}</span>)}
+    </span>
+    <span style={{ fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif', whiteSpace: 'nowrap' }}>
+      BUILT ON SPACETIMEDB
+    </span>
+  </div>
+);
 
 // ─── Relative time ────────────────────────────────────────────────────────────
 const toDate = (ts: any): Date | null => {
@@ -97,7 +119,7 @@ const TripRoom = ({
   const [showDeleteTrip, setShowDeleteTrip] = useState(false);
   const [deleteExpenseLoading, setDeleteExpenseLoading] = useState<string | null>(null);
   const [mobileLedgerOpen, setMobileLedgerOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
+  const isMobile = useIsMobile();
   const [settlePayload, setSettlePayload] = useState<{ payerId: string; payeeId: string; amount: number } | null>(null);
   const starPopupRef = useRef<HTMLDivElement>(null);
 
@@ -118,12 +140,6 @@ const TripRoom = ({
     const id = window.setTimeout(() => document.addEventListener('pointerdown', onDown, true), 0);
     return () => { window.clearTimeout(id); document.removeEventListener('pointerdown', onDown, true); };
   }, [selectedMemberId, onStarClick]);
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
 
   const expenses = useExpense();
   const splits = useExpenseSplit();
@@ -390,64 +406,107 @@ const TripRoom = ({
         padding: isMobile ? '14px 14px' : '16px 24px',
         background: 'linear-gradient(to bottom, rgba(2,5,8,0.92) 0%, rgba(2,5,8,0) 100%)',
       }}>
-        <div onClick={onBack} title="Back to cosmos" style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', transition: 'opacity 0.2s' }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}>
-          <svg width="26" height="25" viewBox="0 0 48 46" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
-            <defs><linearGradient id="simpliBoltRoom" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
-            <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltRoom)" />
-          </svg>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0px' }}>
-            <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1, letterSpacing: '0.02em' }}>SIMPLI</span>
-            <span style={{ fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif', marginTop: '2px' }}>BUILT ON SPACETIMEDB</span>
-          </div>
-        </div>
+        {isMobile ? (
+          <>
+            {/* Left: brand bolt + group name — the whole cluster is the back affordance.
+                Fills remaining width and truncates gracefully so nothing crops. */}
+            <button
+              onClick={onBack}
+              className="btn-ghost"
+              title="Back to cosmos"
+              aria-label={`Back to cosmos, currently in ${trip.name}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, padding: '4px 4px', justifyContent: 'flex-start' }}
+            >
+              <svg width="22" height="21" viewBox="0 0 48 46" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
+                <defs><linearGradient id="simpliBoltRoom" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
+                <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltRoom)" />
+              </svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+              <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.12rem', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '0.01em' }}>{trip.name}</span>
+            </button>
 
-        <div style={{ flex: 1 }} />
+            {/* Right: compact action cluster */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+              <button
+                onClick={() => setShowDeleteTrip(true)}
+                style={{ ...BTN_GHOST, width: 30, height: 30, padding: 0, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                title="Delete galaxy" aria-label="Delete galaxy"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              </button>
+              <button onClick={onOpenLeaderboard} title="Leaderboard" aria-label="Leaderboard" className="trophy-btn" style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 30, height: 30, padding: 0, borderRadius: '50%', cursor: 'pointer',
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,196,107,0.25)',
+              }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="trophyGradRoom" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse"><stop stopColor="#FFD79A" /><stop offset="1" stopColor="#E8963A" /></linearGradient></defs>
+                  <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z" stroke="url(#trophyGradRoom)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M17 5h2.5a1.5 1.5 0 0 1 0 5H17M7 5H4.5a1.5 1.5 0 0 0 0 5H7" stroke="url(#trophyGradRoom)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" className="profile-avatar" style={{ width: 30, height: 30, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', cursor: 'pointer' }} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div onClick={onBack} title="Back to cosmos" style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', transition: 'opacity 0.2s' }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}>
+              <svg width="26" height="25" viewBox="0 0 48 46" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
+                <defs><linearGradient id="simpliBoltRoom" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
+                <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltRoom)" />
+              </svg>
+              <SimpliWordmark />
+            </div>
 
-        {/* Galaxy Chip (Back to Cosmos) */}
-        <button onClick={onBack} className="btn-ghost" style={{ 
-          padding: '8px 16px 8px 12px', fontWeight: 600, color: 'var(--text)', 
-          background: 'var(--glass)', border: '1px solid var(--glass-brd)', borderRadius: '12px',
-          display: 'flex', alignItems: 'center', gap: '8px',
-          transition: 'background 0.2s', fontSize: '0.9rem'
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-        onMouseLeave={(e) => e.currentTarget.style.background = 'var(--glass)'}
-        >
-          <span style={{ color: 'var(--text-dim)' }}>←</span> {trip.name}
-        </button>
+            <div style={{ flex: 1 }} />
 
-        <div style={{ flex: 1 }} />
+            {/* Galaxy Chip (Back to Cosmos) */}
+            <button onClick={onBack} className="btn-ghost" style={{
+              padding: '8px 16px 8px 12px', fontWeight: 600, color: 'var(--text)',
+              background: 'var(--glass)', border: '1px solid var(--glass-brd)', borderRadius: '12px',
+              display: 'flex', alignItems: 'center', gap: '8px',
+              transition: 'background 0.2s', fontSize: '0.9rem'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'var(--glass)'}
+            >
+              <span style={{ color: 'var(--text-dim)' }}>←</span> {trip.name}
+            </button>
 
-        {/* Galaxy settings (Trash) */}
-        <button
-          onClick={() => setShowDeleteTrip(true)}
-          style={{ ...BTN_GHOST, padding: '8px', color: 'var(--text-dim)', transition: 'color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--owe)'}
-          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
-          title="Delete galaxy"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-        </button>
+            <div style={{ flex: 1 }} />
 
-<button onClick={onOpenLeaderboard} title="Leaderboard" aria-label="Leaderboard" className="trophy-btn" style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 32, height: 32, marginLeft: '12px', padding: 0,
-          borderRadius: '50%', cursor: 'pointer',
-          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,196,107,0.25)',
-        }}>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="trophyGradRoom" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#FFD79A" /><stop offset="1" stopColor="#E8963A" />
-              </linearGradient>
-            </defs>
-            <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z" stroke="url(#trophyGradRoom)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M17 5h2.5a1.5 1.5 0 0 1 0 5H17M7 5H4.5a1.5 1.5 0 0 0 0 5H7" stroke="url(#trophyGradRoom)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" className="profile-avatar" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', marginLeft: '8px', cursor: 'pointer' }} />
+            {/* Galaxy settings (Trash) */}
+            <button
+              onClick={() => setShowDeleteTrip(true)}
+              style={{ ...BTN_GHOST, padding: '8px', color: 'var(--text-dim)', transition: 'color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--owe)'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
+              title="Delete galaxy"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+
+            <button onClick={onOpenLeaderboard} title="Leaderboard" aria-label="Leaderboard" className="trophy-btn" style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 32, height: 32, marginLeft: '12px', padding: 0,
+              borderRadius: '50%', cursor: 'pointer',
+              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,196,107,0.25)',
+            }}>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="trophyGradRoom" x1="12" y1="3" x2="12" y2="21" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#FFD79A" /><stop offset="1" stopColor="#E8963A" />
+                  </linearGradient>
+                </defs>
+                <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z" stroke="url(#trophyGradRoom)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M17 5h2.5a1.5 1.5 0 0 1 0 5H17M7 5H4.5a1.5 1.5 0 0 0 0 5H7" stroke="url(#trophyGradRoom)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <img src={profile.picture} alt="Profile" onClick={onOpenProfile} title="Profile" className="profile-avatar" style={{ width: 32, height: 32, borderRadius: '50%', border: '2px solid rgba(156,174,169,0.3)', marginLeft: '8px', cursor: 'pointer' }} />
+          </>
+        )}
       </div>
 
       {/* Mobile balance status bar: always-visible trip balance, tap to open the ledger sheet */}
@@ -959,7 +1018,7 @@ const SettledSectorControl = ({
   homeView, onSetHomeView, settledCount,
 }: { homeView: HomeView; onSetHomeView: (v: HomeView) => void; settledCount: number }) => {
   const [expanded, setExpanded] = useState(true);
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const isMobile = useIsMobile();
   const active = homeView === 'active';
 
   // Show full, then collapse to the compact tab after a beat — replays on view change.
@@ -994,15 +1053,10 @@ const SettledSectorControl = ({
           boxShadow: '0 8px 32px rgba(0,0,0,0.4)', color: 'var(--text)',
         }}
       >
-        {active ? (
-          <span style={{ display: 'flex', width: 28, height: 28, flexShrink: 0, borderRadius: '50%', alignItems: 'center', justifyContent: 'center', background: 'rgba(156,163,178,0.12)', border: '1px solid rgba(156,163,178,0.3)' }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9aa3b2" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-          </span>
-        ) : (
-          <span style={{ display: 'flex', width: 28, height: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-          </span>
-        )}
+        {/* Uniform affordance on both sectors: a single left-arrow chevron. */}
+        <span style={{ display: 'flex', width: 28, height: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+        </span>
         <AnimatePresence initial={false}>
           {expanded && (
             <motion.span
@@ -1039,6 +1093,7 @@ const Dashboard = ({
 }) => {
   const [newTripName, setNewTripName] = useState('');
   const [creating, setCreating] = useState(false);
+  const isMobile = useIsMobile();
 
   const handleCreate = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1083,10 +1138,7 @@ const Dashboard = ({
             <defs><linearGradient id="simpliBoltHome" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
             <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltHome)" />
           </svg>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0px' }}>
-            <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.35rem', color: 'var(--text)', lineHeight: 1, letterSpacing: '0.02em' }}>SIMPLI</span>
-            <span style={{ fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.06em', fontFamily: 'Satoshi, sans-serif', marginTop: '2px' }}>BUILT ON SPACETIMEDB</span>
-          </div>
+          <SimpliWordmark />
         </div>
         <div style={{ flex: 1 }} />
         
@@ -1154,43 +1206,43 @@ const Dashboard = ({
 
       {/* Bottom Create Bar */}
       <div style={{
-        position: 'absolute', bottom: '32px', left: '50%', transform: 'translateX(-50%)',
-        pointerEvents: 'all', width: '100%', maxWidth: '520px', padding: '0 16px', boxSizing: 'border-box'
+        position: 'absolute', bottom: isMobile ? 'calc(20px + env(safe-area-inset-bottom))' : '32px', left: '50%', transform: 'translateX(-50%)',
+        pointerEvents: 'all', width: '100%', maxWidth: isMobile ? '460px' : '520px', padding: '0 16px', boxSizing: 'border-box'
       }}>
         {/* Soft outer glow */}
         <div style={{
           position: 'absolute', inset: '0 16px', borderRadius: '12px',
           background: 'radial-gradient(circle at 50% 50%, rgba(255,183,77,0.12) 0%, rgba(94,230,255,0.06) 50%, transparent 100%)',
-          filter: 'blur(22px)', zIndex: -1, pointerEvents: 'none'
+          filter: isMobile ? 'blur(18px)' : 'blur(22px)', zIndex: -1, pointerEvents: 'none'
         }} />
-        <form onSubmit={handleCreate} style={{ 
-          display: 'flex', gap: '10px'
+        <form onSubmit={handleCreate} style={{
+          display: 'flex', gap: isMobile ? '8px' : '10px'
         }}>
           <div style={{
-            flex: 1, position: 'relative', display: 'flex', alignItems: 'center', gap: '10px',
+            flex: 1, position: 'relative', display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px',
             background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.16)', borderRadius: '14px',
+            border: '1px solid rgba(255,255,255,0.16)', borderRadius: isMobile ? '12px' : '14px',
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 8px 24px rgba(0,0,0,0.35), 0 0 26px rgba(255,183,77,0.10)',
-            paddingLeft: '16px',
+            paddingLeft: isMobile ? '14px' : '16px',
             transition: 'border-color 0.2s, box-shadow 0.2s'
           }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.9 }}>
+            <svg width={isMobile ? 16 : 18} height={isMobile ? 16 : 18} viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.9 }}>
               <path d="M12 3v18M3 12h18" />
             </svg>
             <input
               value={newTripName} onChange={e => setNewTripName(e.target.value)}
               placeholder="Create a new group / galaxy..."
               style={{
-                width: '100%', background: 'transparent', border: 'none', padding: '0 18px 0 0', color: 'var(--text)',
-                fontSize: '0.95rem', outline: 'none', fontFamily: 'inherit', height: '50px', borderRadius: '14px'
+                width: '100%', background: 'transparent', border: 'none', padding: isMobile ? '0 14px 0 0' : '0 18px 0 0', color: 'var(--text)',
+                fontSize: isMobile ? '0.9rem' : '0.95rem', outline: 'none', fontFamily: 'inherit', height: isMobile ? '44px' : '50px', borderRadius: isMobile ? '12px' : '14px'
               }}
               onFocus={(e) => e.target.parentElement!.style.borderColor = 'rgba(255,183,77,0.5)'}
               onBlur={(e) => e.target.parentElement!.style.borderColor = 'rgba(255,255,255,0.14)'}
             />
           </div>
           <button type="submit" disabled={!newTripName.trim() || creating || !isConnected} className="btn-primary" style={{
-            borderRadius: '14px', height: '50px', padding: '0 30px',
-            fontWeight: 700, fontSize: '0.95rem', letterSpacing: '0.01em',
+            borderRadius: isMobile ? '12px' : '14px', height: isMobile ? '44px' : '50px', padding: isMobile ? '0 20px' : '0 30px',
+            fontWeight: 700, fontSize: isMobile ? '0.9rem' : '0.95rem', letterSpacing: '0.01em', flexShrink: 0,
             opacity: newTripName.trim() && !creating && isConnected ? 1 : 0.9,
             background: 'linear-gradient(180deg, #FFC46B, #E8963A)',
             color: '#ffffff', border: 'none',

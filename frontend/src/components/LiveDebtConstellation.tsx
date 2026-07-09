@@ -14,6 +14,8 @@ import { motion } from 'framer-motion';
 import * as THREE from 'three';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import { useTripMember } from '../hooks/useTrips';
+import { useUserDevice } from '../hooks/useUserDevice';
+import { resolveNames } from '../lib/names';
 import * as StDB from '../spacetimedb';
 import { AudioService } from '../audio';
 import { buildOwesMap, pairNet } from '../lib/ledger';
@@ -22,14 +24,6 @@ const INR = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
-
-const identityStr = (u: any): string => {
-  if (!u?.id) return '';
-  if (typeof u.id === 'object' && u.id && 'toHexString' in u.id) {
-    return norm(u.id.toHexString());
-  }
-  return norm(u.id);
-};
 
 const AtmosphereShell = ({ color, strength, radius = 0.62 }: { color: string; strength: number; radius?: number }) => {
   const mat = useMemo(() => new THREE.ShaderMaterial({
@@ -84,6 +78,7 @@ interface LDCProps {
 
 export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, onStarClick, selectedMemberId, settling: _settling, onSelectedStarPosUpdate }: LDCProps) => {
   const allUsers = useUser();
+  const userDevices = useUserDevice();
   const tripMemberIds = useTripMember(activeTripId);
   const splits = useExpenseSplit();
   const expenses = useExpense();
@@ -91,15 +86,10 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
 
   const localId = norm(StDB.getLocalId() ?? '');
 
-  // Build member user map (id → name)
-  const userMap = useMemo(() => {
-    const m = new Map<string, string>();
-    allUsers.forEach(u => {
-      const id = identityStr(u);
-      if (id && !m.has(id)) m.set(id, u.name || 'Member');
-    });
-    return m;
-  }, [allUsers]);
+  // Build member user map (id → name). Members are keyed by Google sub after the
+  // device-link migration, so we use the shared resolver which bridges
+  // sub → device identity → name (and still resolves legacy identity-keyed rows).
+  const userMap = useMemo(() => resolveNames(allUsers, userDevices), [allUsers, userDevices]);
 
   // Ordered member list for the trip
   const members = useMemo(() => {

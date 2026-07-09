@@ -575,8 +575,10 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
         });
       });
 
-      // Settled from the local user's perspective: no outstanding balance with any member.
-      let settled = true;
+      // A brand-new group with no expenses yet is NOT "settled" — it belongs on the active
+      // home screen, not the settled sector. A group is only settled once it has activity
+      // that nets to zero from the local user's perspective.
+      let settled = tripExp.length > 0;
       Object.keys(netUser).forEach(otherId => {
         if (otherId === localId) return;
         if (Math.abs(pairNet(owes, localId, otherId)) > 0.5) settled = false;
