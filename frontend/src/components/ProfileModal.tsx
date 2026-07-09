@@ -151,7 +151,7 @@ export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: P
 
             {!confirmLogout ? (
               <button onClick={() => setConfirmLogout(true)} style={{
-                marginTop: 28, padding: '0 32px', height: 42, borderRadius: 21,
+                marginTop: 28, padding: '0 32px', height: 44, borderRadius: 12,
                 background: 'rgba(217,138,108,0.10)', border: '1px solid rgba(217,138,108,0.4)',
                 color: '#d98a6c', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer',
                 transition: 'all 0.2s',

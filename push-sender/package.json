@@ -1,0 +1,24 @@
+{
+  "name": "simpli-push-sender",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Always-on worker that delivers Web Push notifications for SIMPLI expense/join events.",
+  "scripts": {
+    "start": "tsx index.ts",
+    "dev": "tsx watch index.ts",
+    "gen-vapid": "web-push generate-vapid-keys --json"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "spacetimedb": "^2.6.1",
+    "web-push": "^3.6.7",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.0"
+  }
+}

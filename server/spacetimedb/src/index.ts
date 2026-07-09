@@ -49,6 +49,18 @@ const spacetimedb = schema({
       google_sub: t.string().index(),
     }
   ),
+  // Web Push subscriptions, keyed by endpoint. Read by the external push-sender
+  // service to deliver notifications when a member's app is closed.
+  push_subscription: table(
+    { public: true },
+    {
+      endpoint: t.string().primaryKey(),
+      user_id: t.string().index(),
+      p256dh: t.string(),
+      auth: t.string(),
+      created_at: t.timestamp(),
+    }
+  ),
 });
 export default spacetimedb;
 
@@ -270,6 +282,31 @@ export const updateExpense = spacetimedb.reducer(
       description,
       timestamp: exp.timestamp,
     });
+  }
+);
+
+// ── Web Push subscription management ────────────────────────────────────────
+// Store (or refresh) the caller's push subscription. Keyed by endpoint so the same
+// browser re-subscribing replaces its previous row. user_id is derived from the
+// caller's linked device (google_sub) exactly like every other reducer here.
+export const savePushSubscription = spacetimedb.reducer(
+  { endpoint: t.string(), p256dh: t.string(), auth: t.string() },
+  (ctx, { endpoint, p256dh, auth }) => {
+    const device = ctx.db.user_device.device_identity.find(ctx.sender.toHexString());
+    const user_id = device ? device.google_sub : ctx.sender.toHexString();
+    const existing = ctx.db.push_subscription.endpoint.find(endpoint);
+    if (existing) ctx.db.push_subscription.delete(existing);
+    ctx.db.push_subscription.insert({ endpoint, user_id, p256dh, auth, created_at: ctx.timestamp });
+  }
+);
+
+// Remove a subscription (called by the client on unsubscribe, or by the sender
+// when a push endpoint returns 404/410 Gone).
+export const deletePushSubscription = spacetimedb.reducer(
+  { endpoint: t.string() },
+  (ctx, { endpoint }) => {
+    const existing = ctx.db.push_subscription.endpoint.find(endpoint);
+    if (existing) ctx.db.push_subscription.delete(existing);
   }
 );
 

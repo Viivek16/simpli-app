@@ -16,7 +16,7 @@ import { useUserDevice } from './hooks/useUserDevice';
 import { resolveNames } from './lib/names';
 import { buildOwesMap, pairNet } from './lib/ledger';
 import { ExpenseModal } from './components/ExpenseModal';
-import { GalaxyBackground } from './components/GalaxyBackground';
+import { GalaxyBackground, type HomeView } from './components/GalaxyBackground';
 import { LeaderboardSidebar } from './components/LeaderboardSidebar';
 import { ProfileModal } from './components/ProfileModal';
 import { SettleModal } from './components/SettleModal';
@@ -476,32 +476,36 @@ const TripRoom = ({
 
       {/* Bottom Actions */}
       <div style={isMobile ? {
-        position: 'absolute', left: '16px', right: '16px', pointerEvents: 'all',
+        position: 'absolute', left: 0, right: 0, pointerEvents: 'none',
         bottom: mobileLedgerOpen ? 'calc(62vh + 16px)' : 'calc(20px + env(safe-area-inset-bottom))',
-        display: 'flex', alignItems: 'center', gap: '10px', zIndex: 20,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', zIndex: 20,
         transition: 'bottom 0.4s cubic-bezier(0.32,0.72,0,1)'
       } : {
         position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'all',
         display: 'flex', alignItems: 'center', gap: '12px', zIndex: 20
       }}>
-        <button onClick={copyInvite} className="btn-secondary" style={{ 
-          padding: '0', height: '48px', borderRadius: '12px',
-          minWidth: isMobile ? 0 : '160px', flex: isMobile ? 1 : 'none',
-          background: 'var(--glass)', border: '1px solid rgba(255,255,255,0.14)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-          color: '#ffffff', fontSize: '0.95rem', fontWeight: 600
+        {/* On mobile: compact icon-only Invite; on desktop: full labeled button */}
+        <button onClick={copyInvite} className="btn-secondary lift" style={{
+          padding: 0, height: isMobile ? '46px' : '48px', borderRadius: isMobile ? '14px' : '12px',
+          width: isMobile ? '46px' : 'auto', minWidth: isMobile ? '46px' : '160px', flex: 'none',
+          background: 'rgba(5,6,10,0.72)', border: '1px solid rgba(255,255,255,0.14)',
+          backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 0 : '8px',
+          color: '#ffffff', fontSize: '0.95rem', fontWeight: 600, pointerEvents: 'all',
+          paddingLeft: isMobile ? 0 : undefined, paddingRight: isMobile ? 0 : undefined,
         }}
-        title="Invite">
-           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
-           {copied ? 'Copied' : 'Invite'}
+        aria-label="Invite" title="Invite">
+           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
+           {!isMobile && (copied ? 'Copied' : 'Invite')}
         </button>
 
-        <button onClick={() => { AudioService.playBlip(); setEditPayload(null); setShowModal(true); }} className="btn-primary" style={{ 
-          padding: '0', height: '48px', borderRadius: '12px',
-          minWidth: isMobile ? 0 : '160px', flex: isMobile ? 1.3 : 'none',
+        <button onClick={() => { AudioService.playBlip(); setEditPayload(null); setShowModal(true); }} className="btn-primary lift" style={{
+          padding: isMobile ? '0 22px' : '0', height: isMobile ? '46px' : '48px', borderRadius: isMobile ? '14px' : '12px',
+          minWidth: isMobile ? 0 : '160px', flex: 'none',
           background: 'linear-gradient(180deg, #FFC46B, #E8963A)', border: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-          color: '#ffffff', fontSize: '0.95rem', fontWeight: 600, boxShadow: '0 6px 18px rgba(232,150,58,0.35)'
+          color: '#ffffff', fontSize: isMobile ? '0.9rem' : '0.95rem', fontWeight: 600,
+          boxShadow: '0 6px 18px rgba(232,150,58,0.35)', pointerEvents: 'all',
         }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           Add expense
@@ -936,9 +940,11 @@ const TripRoom = ({
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 const Dashboard = ({
   profile, isConnected, onOpenProfile, onOpenLeaderboard, onSelectTrip, subReady, trips,
+  homeView, onSetHomeView, sectorCounts,
 }: {
   profile: GoogleProfile; isConnected: boolean; onOpenProfile: () => void; onOpenLeaderboard: () => void;
   onSelectTrip: (t: Trip) => void; subReady: boolean; trips: Trip[];
+  homeView: HomeView; onSetHomeView: (v: HomeView) => void; sectorCounts: { active: number; settled: number };
 }) => {
   const [newTripName, setNewTripName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -1014,6 +1020,50 @@ const Dashboard = ({
         </div>
       </div>
 
+      {/* Settled-sector control: zoop between active and settled galaxies */}
+      {subReady && sectorCounts.settled > 0 && (
+        <motion.button
+          key={homeView}
+          initial={{ opacity: 0, x: -14, y: '-50%' }}
+          animate={{ opacity: 1, x: 0, y: '-50%' }}
+          transition={{ duration: 0.35, ease: EO }}
+          onClick={() => { AudioService.playBlip(); onSetHomeView(homeView === 'active' ? 'settled' : 'active'); }}
+          style={{
+            position: 'absolute', left: 0, top: '50%',
+            pointerEvents: 'all', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '11px 15px 11px 12px',
+            background: 'rgba(5,6,10,0.72)', border: '1px solid var(--glass-brd)', borderLeft: 'none',
+            borderRadius: '0 16px 16px 0',
+            backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)', color: 'var(--text)',
+          }}
+          aria-label={homeView === 'active' ? 'View settled groups' : 'Back to active groups'}
+          title={homeView === 'active' ? 'View settled groups' : 'Back to active groups'}
+        >
+          {homeView === 'active' ? (
+            <>
+              <span style={{ display: 'flex', width: 30, height: 30, borderRadius: '50%', alignItems: 'center', justifyContent: 'center', background: 'rgba(156,163,178,0.12)', border: '1px solid rgba(156,163,178,0.3)' }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9aa3b2" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              </span>
+              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+                <span style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Settled</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>{sectorCounts.settled} {sectorCounts.settled === 1 ? 'group' : 'groups'}</span>
+              </span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+            </>
+          ) : (
+            <>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+                <span style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Back to</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>Active groups</span>
+              </span>
+            </>
+          )}
+        </motion.button>
+      )}
+
       {/* Empty State */}
       {subReady && trips.length === 0 && (
         <div style={{
@@ -1025,6 +1075,28 @@ const Dashboard = ({
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <polyline points="19 12 12 19 5 12"></polyline>
           </svg>
+        </div>
+      )}
+
+      {/* Active sector empty, but settled groups exist → gently point to the settled sector */}
+      {subReady && trips.length > 0 && homeView === 'active' && sectorCounts.active === 0 && sectorCounts.settled > 0 && (
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', opacity: 0.6, textAlign: 'center', padding: '0 24px'
+        }}>
+          <div className="font-clash" style={{ fontSize: '1.15rem', color: 'var(--text-dim)', fontWeight: 500 }}>Everything's settled up ✦</div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>Your settled groups are parked in their own sector — open it from the left.</div>
+        </div>
+      )}
+
+      {/* Settled sector caption */}
+      {subReady && homeView === 'settled' && (
+        <div style={{
+          position: 'absolute', top: 'calc(20px + 64px)', left: '50%', transform: 'translateX(-50%)',
+          pointerEvents: 'none', textAlign: 'center', opacity: 0.75
+        }}>
+          <div className="font-clash" style={{ fontSize: '1rem', color: 'var(--text)', fontWeight: 600 }}>Settled groups</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 2 }}>All squared away — nothing owed here</div>
         </div>
       )}
 
@@ -1171,6 +1243,12 @@ function App() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [homeView, setHomeView] = useState<HomeView>('active');
+  const [sectorCounts, setSectorCounts] = useState<{ active: number; settled: number }>({ active: 0, settled: 0 });
+  // If nothing is settled anymore, fall back to the active sector automatically.
+  useEffect(() => {
+    if (homeView === 'settled' && sectorCounts.settled === 0) setHomeView('active');
+  }, [homeView, sectorCounts.settled]);
   const isConnected = useIsConnected();
   const trips = useTrip();
   const [cachedTrips] = useState<Trip[]>(() => {
@@ -1194,6 +1272,18 @@ function App() {
     }
     setSelectedTrip(t);
   }, []);
+
+  // Keep the open trip's name in sync with the live trip table. When a user opens a
+  // group via an invite link, the trip row may not have replicated yet, so the header
+  // briefly falls back to a placeholder — this resolves it to the real name once it lands.
+  useEffect(() => {
+    if (!selectedTrip) return;
+    const live = trips.find(t => t.id === selectedTrip.id);
+    if (live && live.name && live.name !== selectedTrip.name && live.name !== live.id) {
+      setSelectedTrip(prev => (prev && prev.id === live.id) ? { ...prev, name: live.name } : prev);
+      try { sessionStorage.setItem('simpli_selected_trip', JSON.stringify({ id: live.id, name: live.name })); } catch {}
+    }
+  }, [trips, selectedTrip]);
 
   // Browser back button support
   useEffect(() => {
@@ -1225,11 +1315,12 @@ function App() {
         const c = StDB.conn as any;
         if (c) {
           try { c.reducers.joinTrip({ tripId }); } catch { /* already member */ }
-          // Try to resolve trip name from cache
+          // Resolve trip name from the live cache; if it hasn't replicated yet, use a
+          // neutral placeholder (never the raw id) — the sync effect fills in the real name.
           try {
             const row = [...c.db.trip.iter()].find((t: any) => t.id === tripId);
-            selectTrip({ id: tripId, name: row?.name || tripId });
-          } catch { selectTrip({ id: tripId, name: tripId }); }
+            selectTrip({ id: tripId, name: row?.name || 'Opening group…' });
+          } catch { selectTrip({ id: tripId, name: 'Opening group…' }); }
         }
       };
       if (StDB.conn) fn();
@@ -1252,8 +1343,8 @@ function App() {
           try { c.reducers.joinTrip({ tripId: pending }); } catch {}
           try {
             const row = [...c.db.trip.iter()].find((t: any) => t.id === pending);
-            selectTrip({ id: pending, name: row?.name || pending });
-          } catch { selectTrip({ id: pending, name: pending }); }
+            selectTrip({ id: pending, name: row?.name || 'Opening group…' });
+          } catch { selectTrip({ id: pending, name: 'Opening group…' }); }
         }
       };
       if (StDB.conn) fn();
@@ -1294,6 +1385,7 @@ function App() {
   }, [profile]);
 
   const handleLogout = () => {
+    void import('./push').then(m => m.disablePush()).catch(() => {});
     localStorage.removeItem('simpli_user');
     googleLogout();
     setProfile(null);
@@ -1317,6 +1409,8 @@ function App() {
           onStarClick={setSelectedMemberId}
           selectedMemberId={selectedMemberId}
           onSelectedStarPosUpdate={setSelectedStarPos}
+          homeView={homeView}
+          onSectorCounts={setSectorCounts}
         />
       </ErrorBoundary>
 
@@ -1349,6 +1443,9 @@ function App() {
                   onSelectTrip={selectTrip}
                   subReady={subReady}
                   trips={trips}
+                  homeView={homeView}
+                  onSetHomeView={setHomeView}
+                  sectorCounts={sectorCounts}
                 />
               )}
             </AnimatePresence>

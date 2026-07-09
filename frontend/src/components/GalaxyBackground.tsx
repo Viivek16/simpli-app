@@ -80,6 +80,25 @@ const hashId = (id: string): number => {
 
 const tripColor = (id: string) => PALETTE[hashId(id) % PALETTE.length];
 
+// ─── Cosmos sectors (Phase 3: settled galaxies live in a separate region) ─────
+// Active galaxies orbit the origin; settled galaxies orbit a distant sector the
+// user "zoops" to via a side control. Keeps the home view uncluttered.
+const ORIGIN = new THREE.Vector3(0, 0, 0);
+const SETTLED_CENTER = new THREE.Vector3(96, 0, 0);
+const isPhoneNow = () => typeof window !== 'undefined' && window.innerWidth <= 768;
+const ringRadius = (count: number, phone: boolean) =>
+  phone ? Math.max(5, 3.4 + count * 0.75) : Math.max(6.5, 5 + count * 1.0);
+const ringPosition = (idx: number, count: number, center: THREE.Vector3, phone: boolean) => {
+  const angle = (idx / Math.max(count, 1)) * Math.PI * 2;
+  const r = ringRadius(count, phone);
+  return new THREE.Vector3(center.x + Math.cos(angle) * r, center.y, center.z + Math.sin(angle) * r);
+};
+// Camera pose that frames a sector centred at `center`.
+const framePose = (center: THREE.Vector3, phone: boolean) =>
+  new THREE.Vector3(center.x, center.y + (phone ? 7 : 6), center.z + (phone ? 26 : 16));
+
+export type HomeView = 'active' | 'settled';
+
 // ─── Macro galaxy particle cloud ──────────────────────────────────────────────
 let sharedGlowTex: THREE.CanvasTexture | null = null;
 
@@ -153,12 +172,12 @@ const SwirlingGalaxy = ({
     }
 
     const elapsed = clock.getElapsedTime() - mountTime.current;
-    const delay = index * 0.090; // 90ms stagger
-    
+    const delay = index * 0.060; // 60ms stagger — snappier reveal, less perceived lag
+
     let e = 1;
     if (elapsed < delay) e = 0;
-    else if (elapsed - delay < 0.520) {
-      const t = (elapsed - delay) / 0.520;
+    else if (elapsed - delay < 0.420) {
+      const t = (elapsed - delay) / 0.420;
       e = 1 - Math.pow(1 - t, 4); // cubic-bezier(0.22, 1, 0.36, 1) approx
     }
     
@@ -181,22 +200,18 @@ const SwirlingGalaxy = ({
     }
   });
 
-  const displayPos = useMemo(() => {
-    if (!settled) return position;
-    const p = position.clone();
-    p.multiplyScalar(1.15);
-    p.z -= 10;
-    p.y += 2.5;
-    return p;
-  }, [position, settled]);
+  // Position is now the galaxy's final world position (active or settled sector);
+  // sector separation handles decluttering, so no in-place push-back is needed.
+  const displayPos = position;
 
   return (
     <group position={displayPos}>
       <group ref={ref} rotation={[0.1, 0, -0.1]}>
         <Points
           ref={pointsRef} positions={positions} colors={colors} stride={3} frustumCulled={false}
-          onClick={(e) => { if (onClick) { e.stopPropagation(); onClick(); } }}
-          onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer'; onHoverChange?.(true); }}
+          raycast={hidden ? () => null : undefined}
+          onClick={(e) => { if (hidden || !onClick) return; e.stopPropagation(); onClick(); }}
+          onPointerOver={(e) => { if (hidden) return; e.stopPropagation(); document.body.style.cursor = 'pointer'; onHoverChange?.(true); }}
           onPointerOut={() => { document.body.style.cursor = 'auto'; onHoverChange?.(false); }}
         >
           <PointMaterial
@@ -328,8 +343,8 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
 
 // ─── Camera Animator ────────────────────────────────────────────────────────
 const CameraAnimator = ({
-  targetPos, settling,
-}: { targetPos: THREE.Vector3; settling: boolean }) => {
+  targetPos, settling, duration = 1.4,
+}: { targetPos: THREE.Vector3; settling: boolean; duration?: number }) => {
   const { camera } = useThree();
   const startTime = useRef<number | null>(null);
   const startPos = useRef(camera.position.clone());
@@ -344,7 +359,7 @@ const CameraAnimator = ({
   useFrame(({ clock }) => {
     if (!settling) return;
     if (startTime.current === null) startTime.current = clock.getElapsedTime();
-    const t = Math.min((clock.getElapsedTime() - startTime.current) / 1.4, 1.0);
+    const t = Math.min((clock.getElapsedTime() - startTime.current) / duration, 1.0);
     // Emil Kowalski easing: cubic-bezier(0.22, 1, 0.36, 1)
     const e = 1 - Math.pow(1 - t, 4); 
     
@@ -363,7 +378,7 @@ const CameraAnimator = ({
 };
 
 // Wrapper to share state between the canvas and the DOM
-const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, tripBalances, selectedMemberId, onSelectedStarPosUpdate }: {
+const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, tripBalances, selectedMemberId, onSelectedStarPosUpdate, homeView }: {
   activeTripId: string | null;
   trips: Trip[];
   onSelectTrip: (t: Trip) => void;
@@ -374,51 +389,59 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
   tripBalances: Record<string, { settled: boolean, netBalances: { owes: string, owed: string, amtOwes: number, amtOwed: number } | null }>;
   selectedMemberId?: string | null;
   onSelectedStarPosUpdate?: (pos: { x: number, y: number } | null) => void;
+  homeView: HomeView;
 }) => {
   const [hoveredTripId, setHoveredTripId] = useState<string | null>(null);
   const [settling, setSettling] = useState(false);
   const [settled, setSettled] = useState(false);
-  const targetPos = useRef(new THREE.Vector3(0, 16, 36));
+  const [settleDuration, setSettleDuration] = useState(1.0);
+  const targetPos = useRef(framePose(ORIGIN, isPhoneNow()));
+  const controlsRef = useRef<any>(null);
 
-  // Determine camera target
+  // Galaxy layout: active galaxies orbit the origin, settled ones orbit the distant
+  // settled sector. One source of truth for both rendering and camera targeting.
+  const layout = useMemo(() => {
+    const phone = isPhoneNow();
+    const active = trips.filter(t => !(tripBalances[t.id]?.settled));
+    const settledList = trips.filter(t => tripBalances[t.id]?.settled);
+    const items = [
+      ...active.map((trip, idx) => ({ trip, pos: ringPosition(idx, active.length, ORIGIN, phone), idx, sector: 'active' as HomeView, cols: tripColor(trip.id) })),
+      ...settledList.map((trip, idx) => ({ trip, pos: ringPosition(idx, settledList.length, SETTLED_CENTER, phone), idx, sector: 'settled' as HomeView, cols: tripColor(trip.id) })),
+    ];
+    return { items, activeCount: active.length, settledCount: settledList.length };
+  }, [trips, tripBalances]);
+
+  // Determine camera target + zoop duration for the current view.
   useEffect(() => {
+    const phone = isPhoneNow();
+    let dur = 1.0;
     if (activeTripId) {
-      const activeTripIndex = trips.findIndex(t => t.id === activeTripId);
-      const angle = (activeTripIndex / Math.max(trips.length, 1)) * Math.PI * 2;
-      const isPhone = typeof window !== 'undefined' && window.innerWidth <= 768;
-      const r = isPhone ? Math.max(5, 3.4 + trips.length * 0.75) : Math.max(6.5, 5 + trips.length * 1.0);
-      const pos = new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r);
-      // Phones use a wider field of view (set in CameraAnimator and on the Canvas), so a gentle
-      // pull-back frames the whole constellation without the user pinch-zooming out.
-      targetPos.current = isPhone
-        ? new THREE.Vector3(pos.x, pos.y + 4, pos.z + 14)
-        : new THREE.Vector3(pos.x, pos.y + 4, pos.z + 12);
-      setSettling(true); setSettled(false);
-      const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
-      return () => clearTimeout(t);
+      // Micro view: always frame the constellation at the origin (snappy).
+      targetPos.current = phone ? new THREE.Vector3(0, 4, 14) : new THREE.Vector3(0, 4, 12);
+      dur = 1.1;
     } else {
-      const isPhone = typeof window !== 'undefined' && window.innerWidth <= 768;
-      // Phones frame all galaxies inside the smaller viewport (wider fov + gentle pull-back).
-      targetPos.current = isPhone ? new THREE.Vector3(0, 7, 26) : new THREE.Vector3(0, 6, 16);
-      setSettling(true); setSettled(false);
-      const t = setTimeout(() => { setSettling(false); setSettled(true); }, 1400);
-      return () => clearTimeout(t);
+      // Home: frame the active sector, or zoop across to the settled sector.
+      targetPos.current = framePose(homeView === 'settled' ? SETTLED_CENTER : ORIGIN, phone);
+      // The settled sector is a long lateral hop — give it a touch more travel time.
+      dur = homeView === 'settled' ? 1.2 : 1.0;
     }
-  }, [activeTripId, trips]);
+    setSettleDuration(dur);
+    setSettling(true); setSettled(false);
+    const t = setTimeout(() => { setSettling(false); setSettled(true); }, dur * 1000 + 60);
+    return () => clearTimeout(t);
+  }, [activeTripId, homeView]);
 
-  // Trip positions on a ring
-  const tripPositions = useMemo(() => {
-    return trips.map((trip, idx) => {
-      const angle = (idx / Math.max(trips.length, 1)) * Math.PI * 2;
-      const isPhone = typeof window !== 'undefined' && window.innerWidth <= 768;
-      const r = isPhone ? Math.max(5, 3.4 + trips.length * 0.75) : Math.max(6.5, 5 + trips.length * 1.0);
-      return {
-        trip,
-        pos: new THREE.Vector3(Math.cos(angle) * r, 0, Math.sin(angle) * r),
-        cols: tripColor(trip.id),
-      };
-    });
-  }, [trips]);
+  // Keep the orbit pivot on the sector we're viewing so auto-rotate/orbit stays local.
+  const orbitTarget = useMemo<[number, number, number]>(() => {
+    const c = activeTripId ? ORIGIN : (homeView === 'settled' ? SETTLED_CENTER : ORIGIN);
+    return [c.x, c.y, c.z];
+  }, [activeTripId, homeView]);
+  useEffect(() => {
+    const ctrl = controlsRef.current;
+    if (ctrl && ctrl.target) { ctrl.target.set(orbitTarget[0], orbitTarget[1], orbitTarget[2]); ctrl.update?.(); }
+  }, [orbitTarget]);
+
+  const flying = settling && !settled;
 
   return (
     <>
@@ -426,20 +449,22 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
       <ambientLight intensity={activeTripId ? 0.04 : 0.08} />
 
       <OrbitControls
+        ref={controlsRef}
         makeDefault
+        enabled={!flying}
         enablePan={false} enableRotate enableZoom
         enableDamping dampingFactor={0.06}
-        autoRotate={!activeTripId && !uiPaused && !(typeof window !== 'undefined' && window.innerWidth <= 768)} autoRotateSpeed={0.3}
-        minDistance={(typeof window !== 'undefined' && window.innerWidth <= 768) ? (activeTripId ? 5 : 6) : 4}
-        maxDistance={(typeof window !== 'undefined' && window.innerWidth <= 768) ? (activeTripId ? 60 : 42) : 140}
-        minPolarAngle={(typeof window !== 'undefined' && window.innerWidth <= 768) && !activeTripId ? 0.7 : 0}
-        maxPolarAngle={(typeof window !== 'undefined' && window.innerWidth <= 768) && !activeTripId ? 1.35 : Math.PI}
-        minAzimuthAngle={(typeof window !== 'undefined' && window.innerWidth <= 768) && !activeTripId ? -0.6 : -Infinity}
-        maxAzimuthAngle={(typeof window !== 'undefined' && window.innerWidth <= 768) && !activeTripId ? 0.6 : Infinity}
+        autoRotate={!activeTripId && !uiPaused && !flying && !isPhoneNow()} autoRotateSpeed={0.3}
+        minDistance={isPhoneNow() ? (activeTripId ? 5 : 6) : 4}
+        maxDistance={isPhoneNow() ? (activeTripId ? 60 : 42) : 140}
+        minPolarAngle={isPhoneNow() && !activeTripId ? 0.7 : 0}
+        maxPolarAngle={isPhoneNow() && !activeTripId ? 1.35 : Math.PI}
+        minAzimuthAngle={isPhoneNow() && !activeTripId ? -0.6 : -Infinity}
+        maxAzimuthAngle={isPhoneNow() && !activeTripId ? 0.6 : Infinity}
       />
 
-      {/* Camera fly-in: only runs during settle window */}
-      <CameraAnimator targetPos={targetPos.current} settling={settling && !settled} />
+      {/* Camera fly-in / sector zoop: only runs during the settle window */}
+      <CameraAnimator targetPos={targetPos.current} settling={flying} duration={settleDuration} />
 
       <BackgroundStarfield activeTripId={activeTripId} settled={settled} />
 
@@ -453,13 +478,14 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
             onStarClick={onStarClick}
             selectedMemberId={selectedMemberId}
             onSelectedStarPosUpdate={onSelectedStarPosUpdate}
-            settling={settling && !settled}
+            settling={flying}
           />
         )}
-        
-        {/* ── Macro View: galaxy ring fades out when activeTripId is set ── */}
-        {!(activeTripId && settled) && tripPositions.map(({ trip, pos, cols }, idx) => {
+
+        {/* ── Macro View: only the current sector's galaxies are shown/interactive ── */}
+        {!(activeTripId && settled) && layout.items.map(({ trip, pos, cols, idx, sector }) => {
           const bal = tripBalances[trip.id] || { settled: false, netBalances: null };
+          const hidden = activeTripId !== null || sector !== homeView;
           return (
             <SwirlingGalaxy
               key={trip.id}
@@ -470,9 +496,9 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
               name={trip.name}
               hovered={hoveredTripId === trip.id}
               selected={activeTripId === trip.id}
-              hidden={activeTripId !== null}
+              hidden={hidden}
               onClick={() => { AudioService.playBlip(); onSelectTrip(trip); }}
-              onHoverChange={activeTripId ? undefined : (h) => setHoveredTripId(h ? trip.id : (prev => prev === trip.id ? null : prev))}
+              onHoverChange={hidden ? undefined : (h) => setHoveredTripId(h ? trip.id : (prev => prev === trip.id ? null : prev))}
               settled={bal.settled}
               netBalances={bal.netBalances}
             />
@@ -515,9 +541,11 @@ interface GBProps {
   onStarClick: (id: string | null) => void;
   selectedMemberId?: string | null;
   onSelectedStarPosUpdate?: (pos: { x: number, y: number } | null) => void;
+  homeView?: HomeView;
+  onSectorCounts?: (counts: { active: number; settled: number }) => void;
 }
 
-export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, selectedMemberId, onSelectedStarPosUpdate }: GBProps) => {
+export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, selectedMemberId, onSelectedStarPosUpdate, homeView = 'active', onSectorCounts }: GBProps) => {
   const expenses = useExpense();
   const splits = useExpenseSplit();
   const allUsers = useUser();
@@ -570,6 +598,14 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
     return res;
   }, [trips, expenses, splits, allUsers, userDevices, localId]);
 
+  // Report active/settled sector counts to the shell (drives the settled-sector control).
+  useEffect(() => {
+    if (!onSectorCounts) return;
+    let settled = 0;
+    trips.forEach(t => { if (tripBalances[t.id]?.settled) settled++; });
+    onSectorCounts({ active: trips.length - settled, settled });
+  }, [trips, tripBalances, onSectorCounts]);
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 0, background: '#020508',
@@ -577,7 +613,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
     }}>
       <ErrorBoundary fallback={<CosmosFallback trips={trips} onSelectTrip={onSelectTrip} />}>
         <Canvas
-          camera={{ position: (typeof window !== 'undefined' && window.innerWidth <= 768) ? [0, 11, 36] : [0, 11, 27], fov: (typeof window !== 'undefined' && window.innerWidth <= 768) ? 70 : 50 }}
+          camera={{ position: (typeof window !== 'undefined' && window.innerWidth <= 768) ? [0, 9, 30] : [0, 8, 20], fov: (typeof window !== 'undefined' && window.innerWidth <= 768) ? 70 : 50 }}
           dpr={[1, 1.5]}
           frameloop={uiPaused ? 'never' : 'always'}
           style={{ pointerEvents: uiPaused ? 'none' : 'all' }}
@@ -594,6 +630,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
             selectedMemberId={selectedMemberId}
             onSelectedStarPosUpdate={onSelectedStarPosUpdate}
             tripBalances={tripBalances}
+            homeView={homeView}
           />
         </Canvas>
       </ErrorBoundary>

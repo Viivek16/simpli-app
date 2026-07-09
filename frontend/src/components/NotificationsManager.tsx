@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as StDB from '../spacetimedb';
 import { showAppNotification, requestNotificationPermission, notificationsSupported, selfDeletedTrips } from '../notifications';
+import { enablePush } from '../push';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 const first = (name: string) => (name || 'Someone').split(' ')[0];
@@ -162,6 +163,9 @@ export const NotificationsManager = () => {
     const u1 = StDB.onSpacetimeConnect(() => attach(StDB.conn as any));
     const u2 = StDB.onSubscriptionApplied(() => { attach(StDB.conn as any); markReady(); });
 
+    // Already-granted returning users: (re)register the push subscription on load.
+    if (notificationsSupported() && Notification.permission === 'granted') { void enablePush(); }
+
     let bannerTimer: any;
     if (notificationsSupported() && Notification.permission === 'default' && !localStorage.getItem(BANNER_KEY)) {
       bannerTimer = setTimeout(() => { if (!disposed) setShowBanner(true); }, 6000);
@@ -197,6 +201,7 @@ export const NotificationsManager = () => {
         if (granted) {
           localStorage.setItem(BANNER_KEY, '1');
           setShowBanner(false);
+          void enablePush();
         }
       });
     };
@@ -204,7 +209,7 @@ export const NotificationsManager = () => {
     return () => window.removeEventListener('pointerdown', once);
   }, []);
 
-  const enable = async () => { localStorage.setItem(BANNER_KEY, '1'); setShowBanner(false); await requestNotificationPermission(); };
+  const enable = async () => { localStorage.setItem(BANNER_KEY, '1'); setShowBanner(false); const granted = await requestNotificationPermission(); if (granted) void enablePush(); };
   const dismiss = () => { localStorage.setItem(BANNER_KEY, '1'); setShowBanner(false); };
 
   return (

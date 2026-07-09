@@ -40,7 +40,7 @@ self.addEventListener('fetch', (e) => {
 });
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'SIMPLI', body: 'New activity in your trips' };
+  let data = { title: 'SIMPLI', body: 'New activity in your trips', url: '/' };
   try { if (event.data) data = { ...data, ...event.data.json() }; } catch {}
   event.waitUntil(
     self.registration.showNotification(data.title || 'SIMPLI', {
@@ -49,16 +49,23 @@ self.addEventListener('push', (event) => {
       badge: '/icon-192.png',
       tag: 'simpli-activity',
       renotify: true,
+      data: { url: data.url || '/' },
     })
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || '/';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const client of list) { if ('focus' in client) return client.focus(); }
-      if (self.clients.openWindow) return self.clients.openWindow('/');
+      for (const client of list) {
+        if ('focus' in client) {
+          if ('navigate' in client && target !== '/') { try { client.navigate(target); } catch {} }
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(target);
     })
   );
 });
