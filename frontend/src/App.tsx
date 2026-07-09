@@ -2,7 +2,7 @@
  * SIMPLI — App.tsx
  * Phases 1–5 integrated
  */
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -99,12 +99,25 @@ const TripRoom = ({
   const [mobileLedgerOpen, setMobileLedgerOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768);
   const [settlePayload, setSettlePayload] = useState<{ payerId: string; payeeId: string; amount: number } | null>(null);
+  const starPopupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (mobileLedgerOpen) document.body.classList.add('bottom-sheet-open');
     else document.body.classList.remove('bottom-sheet-open');
     return () => document.body.classList.remove('bottom-sheet-open');
   }, [mobileLedgerOpen]);
+
+  // Dismiss the star popup when clicking/tapping anywhere outside it (cosmos or free space).
+  useEffect(() => {
+    if (!selectedMemberId) return;
+    const onDown = (e: PointerEvent) => {
+      const el = starPopupRef.current;
+      if (el && e.target instanceof Node && !el.contains(e.target)) onStarClick(null);
+    };
+    // Defer so the click that opened the popup doesn't immediately close it.
+    const id = window.setTimeout(() => document.addEventListener('pointerdown', onDown, true), 0);
+    return () => { window.clearTimeout(id); document.removeEventListener('pointerdown', onDown, true); };
+  }, [selectedMemberId, onStarClick]);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
@@ -857,6 +870,7 @@ const TripRoom = ({
       <AnimatePresence>
         {selectedMemberId && selectedStarPos && (
           <motion.div
+            ref={starPopupRef}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -934,6 +948,83 @@ const TripRoom = ({
       </AnimatePresence>
 
     </motion.div>
+  );
+};
+
+// ─── Settled-sector control ─────────────────────────────────────────────────
+// A left-edge tab that zoops between active and settled galaxies. It introduces itself
+// fully (icon + label) on mount / view change, then slides back to a compact icon so it
+// never dominates the viewport. On desktop it re-expands on hover.
+const SettledSectorControl = ({
+  homeView, onSetHomeView, settledCount,
+}: { homeView: HomeView; onSetHomeView: (v: HomeView) => void; settledCount: number }) => {
+  const [expanded, setExpanded] = useState(true);
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const active = homeView === 'active';
+
+  // Show full, then collapse to the compact tab after a beat — replays on view change.
+  useEffect(() => {
+    setExpanded(true);
+    const t = window.setTimeout(() => setExpanded(false), 2400);
+    return () => window.clearTimeout(t);
+  }, [homeView]);
+
+  const label = active
+    ? { kicker: 'Settled', main: `${settledCount} ${settledCount === 1 ? 'group' : 'groups'}` }
+    : { kicker: 'Back to', main: 'Active groups' };
+
+  return (
+    <div style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 12 }}>
+      <motion.button
+        initial={{ x: -24, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.4, ease: EO }}
+        onClick={() => { AudioService.playBlip(); onSetHomeView(active ? 'settled' : 'active'); }}
+        onHoverStart={() => { if (!isMobile) setExpanded(true); }}
+        onHoverEnd={() => { if (!isMobile) setExpanded(false); }}
+        aria-label={active ? 'View settled groups' : 'Back to active groups'}
+        title={active ? 'View settled groups' : 'Back to active groups'}
+        style={{
+          pointerEvents: 'all', cursor: 'pointer', overflow: 'hidden',
+          display: 'flex', alignItems: 'center',
+          padding: '8px 11px 8px 9px',
+          background: 'rgba(5,6,10,0.72)', border: '1px solid var(--glass-brd)', borderLeft: 'none',
+          borderRadius: '0 16px 16px 0',
+          backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.4)', color: 'var(--text)',
+        }}
+      >
+        {active ? (
+          <span style={{ display: 'flex', width: 28, height: 28, flexShrink: 0, borderRadius: '50%', alignItems: 'center', justifyContent: 'center', background: 'rgba(156,163,178,0.12)', border: '1px solid rgba(156,163,178,0.3)' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9aa3b2" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+          </span>
+        ) : (
+          <span style={{ display: 'flex', width: 28, height: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+          </span>
+        )}
+        <AnimatePresence initial={false}>
+          {expanded && (
+            <motion.span
+              key="lbl"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 'auto', opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: EO }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 10, overflow: 'hidden', whiteSpace: 'nowrap' }}
+            >
+              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+                <span style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>{label.kicker}</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>{label.main}</span>
+              </span>
+              {active && (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="9 18 15 12 9 6" /></svg>
+              )}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </motion.button>
+    </div>
   );
 };
 
@@ -1020,48 +1111,9 @@ const Dashboard = ({
         </div>
       </div>
 
-      {/* Settled-sector control: zoop between active and settled galaxies */}
+      {/* Settled-sector control: animated left-edge tab */}
       {subReady && sectorCounts.settled > 0 && (
-        <motion.button
-          key={homeView}
-          initial={{ opacity: 0, x: -14, y: '-50%' }}
-          animate={{ opacity: 1, x: 0, y: '-50%' }}
-          transition={{ duration: 0.35, ease: EO }}
-          onClick={() => { AudioService.playBlip(); onSetHomeView(homeView === 'active' ? 'settled' : 'active'); }}
-          style={{
-            position: 'absolute', left: 0, top: '50%',
-            pointerEvents: 'all', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '11px 15px 11px 12px',
-            background: 'rgba(5,6,10,0.72)', border: '1px solid var(--glass-brd)', borderLeft: 'none',
-            borderRadius: '0 16px 16px 0',
-            backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4)', color: 'var(--text)',
-          }}
-          aria-label={homeView === 'active' ? 'View settled groups' : 'Back to active groups'}
-          title={homeView === 'active' ? 'View settled groups' : 'Back to active groups'}
-        >
-          {homeView === 'active' ? (
-            <>
-              <span style={{ display: 'flex', width: 30, height: 30, borderRadius: '50%', alignItems: 'center', justifyContent: 'center', background: 'rgba(156,163,178,0.12)', border: '1px solid rgba(156,163,178,0.3)' }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9aa3b2" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-              </span>
-              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
-                <span style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Settled</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>{sectorCounts.settled} {sectorCounts.settled === 1 ? 'group' : 'groups'}</span>
-              </span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-            </>
-          ) : (
-            <>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
-                <span style={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Back to</span>
-                <span style={{ fontSize: '0.9rem', fontWeight: 700 }}>Active groups</span>
-              </span>
-            </>
-          )}
-        </motion.button>
+        <SettledSectorControl homeView={homeView} onSetHomeView={onSetHomeView} settledCount={sectorCounts.settled} />
       )}
 
       {/* Empty State */}
