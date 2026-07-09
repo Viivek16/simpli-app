@@ -4,6 +4,7 @@ import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import { useUserDevice } from '../hooks/useUserDevice';
 import { useTrip } from '../hooks/useTrips';
 import { resolveNames } from '../lib/names';
+import { resolveTier } from '../lib/tiers';
 import * as StDB from '../spacetimedb';
 
 interface Props {
@@ -18,18 +19,13 @@ const norm = (s: any): string => String(s ?? '').toLowerCase().trim();
 const hexA = (hex: string, a: number): string =>
   hex + Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, '0');
 
-type Tier = { name: string; color: string };
-
-// Activity-based tiers, ranked. added = non-settlement expenses this person paid,
-// settled = settlement payments they made, trips = distinct trips they appear in.
-const resolveTier = (added: number, settled: number, trips: number): Tier => {
-  if (added >= 10 && settled >= 3) return { name: 'Cosmic Legend', color: '#FFC46B' };
-  if (added >= 6 || trips >= 3) return { name: 'Initiator', color: '#B79CFF' };
-  if (added >= 3) return { name: 'Controller', color: '#5EE6FF' };
-  if (settled >= 2) return { name: 'Peacemaker', color: '#6FE29B' };
-  if (added >= 1 || trips >= 1) return { name: 'Explorer', color: '#FFB74D' };
-  return { name: 'Newbie', color: '#9AA3B2' };
-};
+// Permanent (non-blinking) glow presets for the top three rows — three distinct
+// intensities, tinted per-row by the tier colour. Rank 4+ gets no glow.
+const RANK_GLOW = [
+  { blur: 26, a: 0.55, inner: 8, innerA: 0.42, text: 1 },
+  { blur: 20, a: 0.40, inner: 6, innerA: 0.28, text: 0.68 },
+  { blur: 15, a: 0.26, inner: 5, innerA: 0.18, text: 0.44 },
+];
 
 export const LeaderboardSidebar = ({ open, onClose, myName }: Props) => {
   const expenses = useExpense();
@@ -59,7 +55,10 @@ export const LeaderboardSidebar = ({ open, onClose, myName }: Props) => {
     };
 
     // Always include me so I always appear on the board.
-    ensure(me);
+    const meStat = ensure(me);
+    // Count my trips by membership (same signal the profile modal uses), not only
+    // trips I have expenses in — so my tier is identical in both places.
+    myTrips.forEach(t => meStat.trips.add(t.id));
 
     mine.forEach(exp => {
       const payer = norm(exp.payerId);
@@ -134,33 +133,30 @@ export const LeaderboardSidebar = ({ open, onClose, myName }: Props) => {
                   Invite friends to a galaxy and start splitting expenses. As people add and settle, they climb the ranks here.
                 </div>
               ) : rows.map((u, i) => {
-                // Hierarchy glow: brightest at the top, fading to none by rank ~5.
-                const strength = Math.max(0, 1 - i * 0.24);
-                const glowLo = strength > 0
-                  ? `inset 0 1px 0 var(--glass-hi), 0 0 ${Math.round(7 * strength)}px ${hexA(u.tier.color, 0.10 * strength)}`
+                // Permanent, static glow for the top three rows only — three distinct
+                // intensities, each tinted by that row's tier colour. No animation.
+                const g = i < 3 ? RANK_GLOW[i] : null;
+                const rowGlow = g
+                  ? `inset 0 1px 0 var(--glass-hi), 0 0 ${g.blur}px ${hexA(u.tier.color, g.a)}, 0 0 ${g.inner}px ${hexA(u.tier.color, g.innerA)}`
                   : 'none';
-                const glowHi = strength > 0
-                  ? `inset 0 1px 0 var(--glass-hi), 0 0 ${Math.round(22 * strength)}px ${hexA(u.tier.color, 0.42 * strength)}`
-                  : 'none';
+                const textS = g ? g.text : 0;
                 return (
                 <div key={u.id} className="leader-row" style={{
                   display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: 16,
                   background: u.isMe ? `linear-gradient(90deg, ${u.tier.color}15, rgba(5,6,10,0))` : 'rgba(255,255,255,0.02)',
                   border: `1px solid ${u.isMe ? u.tier.color + '40' : 'var(--glass-brd)'}`,
-                  ['--row-shadow-lo' as string]: glowLo,
-                  ['--row-shadow-hi' as string]: glowHi,
-                  ['--row-delay' as string]: `${(i * 0.18).toFixed(2)}s`,
+                  ['--row-glow' as string]: rowGlow,
                 }}>
                   <div style={{
                     width: 32, fontSize: '1.2rem', fontWeight: 700, color: i < 3 ? '#FFC46B' : 'var(--text-dim)',
                     textAlign: 'center', fontVariantNumeric: 'tabular-nums',
-                    textShadow: i < 3 ? `0 0 ${Math.round(12 * strength)}px ${hexA('#FFC46B', 0.6 * strength)}` : 'none',
+                    textShadow: g ? `0 0 ${Math.round(12 * textS)}px ${hexA('#FFC46B', 0.6 * textS)}` : 'none',
                   }}>
                     #{i + 1}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '1.05rem', fontWeight: u.isMe ? 700 : 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: u.tier.color, marginTop: 4, fontWeight: 600, textShadow: strength > 0 ? `0 0 ${Math.round(14 * strength)}px ${hexA(u.tier.color, 0.5 * strength)}` : 'none' }}>{u.tier.name}</div>
+                    <div style={{ fontSize: '0.8rem', color: u.tier.color, marginTop: 4, fontWeight: 600, textShadow: g ? `0 0 ${Math.round(14 * textS)}px ${hexA(u.tier.color, 0.5 * textS)}` : 'none' }}>{u.tier.name}</div>
                   </div>
                   <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
                     {u.score.toLocaleString('en-IN')}

@@ -280,33 +280,40 @@ const SwirlingGalaxy = ({
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+const STARFIELD_COUNT = 3500;
+
 const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string | null; settled: boolean }) => {
   const ref = useRef<THREE.Points>(null);
+  const geomRef = useRef<THREE.BufferGeometry>(null);
   const parallaxRef = useRef<THREE.Group>(null);
   const enableParallax = useMemo(
     () => typeof window !== 'undefined' && window.innerWidth > 768 && !prefersReducedMotion(),
     []
   );
 
-  const { positions, colors } = useMemo(() => {
-    const TOTAL = 3500;
-    const p = new Float32Array(TOTAL * 3);
-    const c = new Float32Array(TOTAL * 3);
-    for (let i = 0; i < TOTAL; i++) {
+  // `base` = rest positions (immutable). `display` = the live buffer the GPU reads,
+  // which we nudge each frame for the cursor repulsion, then relax back to `base`.
+  const { base, display, colors } = useMemo(() => {
+    const b = new Float32Array(STARFIELD_COUNT * 3);
+    const c = new Float32Array(STARFIELD_COUNT * 3);
+    for (let i = 0; i < STARFIELD_COUNT; i++) {
       const layer = i % 3;
       const r = 55 + layer * 35 + Math.random() * 25;
       const theta = 2 * Math.PI * Math.random();
       const phi = Math.acos(2 * Math.random() - 1);
-      p[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      p[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-      p[i * 3 + 2] = r * Math.cos(phi);
-      
+      b[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      b[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      b[i * 3 + 2] = r * Math.cos(phi);
+
       const v = 0.5 + Math.random() * 0.5 + (layer === 0 ? 0.3 : 0);
-      c[i * 3] = v; c[i * 3 + 1] = v; 
+      c[i * 3] = v; c[i * 3 + 1] = v;
       c[i * 3 + 2] = v + (Math.random() < 0.2 ? 0.2 : 0);
     }
-    return { positions: p, colors: c };
+    return { base: b, display: b.slice(), colors: c };
   }, []);
+
+  // Reused each frame — no per-frame allocation.
+  const scratch = useMemo(() => ({ ndc: new THREE.Vector3(), dir: new THREE.Vector3(), center: new THREE.Vector3() }), []);
 
   useFrame((state, delta) => {
     if (!ref.current) return;
@@ -316,8 +323,7 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
     ref.current.rotation.y += delta * 0.018; // slow global drift
     ref.current.rotation.x += delta * 0.004;
 
-    // Cursor "gravity": the cosmos leans away from the pointer, so stars appear to
-    // drift apart around the cursor. Desktop only, damped, reduced-motion aware.
+    // Whole-field parallax lean: the cosmos tilts gently away from the pointer.
     if (enableParallax && parallaxRef.current) {
       const p = state.pointer; // NDC, -1..1
       const tiltX = -p.y * 0.10;
@@ -328,15 +334,62 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
       const s = THREE.MathUtils.lerp(parallaxRef.current.scale.x, targetScale, 0.04);
       parallaxRef.current.scale.setScalar(s);
     }
+
+    // Black-hole cursor field: stars near where the pointer aims are pushed outward,
+    // as if a sphere rolls through them and they spill aside; they ease back when it
+    // moves on. Desktop + cosmos (no active trip) only; smoothed. When disabled the
+    // buffer simply relaxes to rest.
+    const geo = geomRef.current;
+    if (!geo) return;
+    const attr = geo.attributes.position as THREE.BufferAttribute;
+    const arr = attr.array as Float32Array;
+
+    if (enableParallax && !activeTripId) {
+      const R = 30, R2 = R * R, MAXPUSH = 16, DIST = 90, EASE = 0.14;
+      scratch.ndc.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
+      scratch.dir.copy(scratch.ndc).sub(state.camera.position).normalize();
+      scratch.center.copy(state.camera.position).addScaledVector(scratch.dir, DIST);
+      ref.current.worldToLocal(scratch.center); // repulsion centre in the field's local space
+      const cx = scratch.center.x, cy = scratch.center.y, cz = scratch.center.z;
+      for (let i = 0; i < STARFIELD_COUNT; i++) {
+        const ix = i * 3;
+        const bx = base[ix], by = base[ix + 1], bz = base[ix + 2];
+        let tx = bx, ty = by, tz = bz;
+        const dx = bx - cx, dy = by - cy, dz = bz - cz;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < R2) {
+          const d = Math.sqrt(d2) || 1e-3;
+          const f = 1 - d / R;
+          const push = f * f * MAXPUSH;
+          tx = bx + (dx / d) * push; ty = by + (dy / d) * push; tz = bz + (dz / d) * push;
+        }
+        arr[ix] += (tx - arr[ix]) * EASE;
+        arr[ix + 1] += (ty - arr[ix + 1]) * EASE;
+        arr[ix + 2] += (tz - arr[ix + 2]) * EASE;
+      }
+      attr.needsUpdate = true;
+    } else {
+      let moved = false;
+      for (let i = 0; i < arr.length; i++) {
+        const nv = arr[i] + (base[i] - arr[i]) * 0.1;
+        if (Math.abs(nv - arr[i]) > 1e-4) moved = true;
+        arr[i] = nv;
+      }
+      if (moved) attr.needsUpdate = true;
+    }
   });
 
   if (activeTripId && settled) return null;
 
   return (
     <group ref={parallaxRef}>
-      <Points ref={ref} positions={positions} colors={colors} stride={3} frustumCulled={false}>
-        <PointMaterial transparent vertexColors size={0.3} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
-      </Points>
+      <points ref={ref} frustumCulled={false}>
+        <bufferGeometry ref={geomRef}>
+          <bufferAttribute attach="attributes-position" args={[display, 3]} />
+          <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+        </bufferGeometry>
+        <pointsMaterial transparent vertexColors size={0.3} sizeAttenuation depthWrite={false} opacity={0} blending={THREE.AdditiveBlending} toneMapped={false} />
+      </points>
     </group>
   );
 };

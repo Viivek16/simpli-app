@@ -71,7 +71,18 @@ export const onDisconnect = spacetimedb.clientDisconnected(_ctx => {});
 export const createUser = spacetimedb.reducer(
   { name: t.string() },
   (ctx, { name }) => {
-    ctx.db.user.insert({ id: ctx.sender, name });
+    // Upsert. Every client re-calls this on each (re)connect; inserting a duplicate
+    // primary key throws and aborts the reducer — so existing users would error on
+    // every reconnect and name changes would never land. Update in place instead.
+    const existing = ctx.db.user.id.find(ctx.sender);
+    if (existing) {
+      if (existing.name !== name) {
+        ctx.db.user.delete(existing);
+        ctx.db.user.insert({ id: ctx.sender, name });
+      }
+    } else {
+      ctx.db.user.insert({ id: ctx.sender, name });
+    }
   }
 );
 
@@ -144,6 +155,7 @@ export const addExpense = spacetimedb.reducer(
     splits: t.string(), // JSON array of splits
   },
   (ctx, { expense_id, trip_id, amount, description, splits }) => {
+    requireMember(ctx, trip_id); // only members may write expenses into a trip
     const device = ctx.db.user_device.device_identity.find(ctx.sender.toHexString());
     const user_id = device ? device.google_sub : ctx.sender.toHexString();
 
@@ -192,6 +204,7 @@ export const addExpense = spacetimedb.reducer(
 export const settleDebt = spacetimedb.reducer(
   { trip_id: t.string(), debtor_id: t.string(), payee_id: t.string(), amount: t.f64() },
   (ctx, { trip_id, debtor_id, payee_id, amount }) => {
+    requireMember(ctx, trip_id); // only members may record settlements in a trip
     const synthetic_expense_id = `settle_${ctx.timestamp.microsSinceUnixEpoch}_${debtor_id}_${payee_id}`;
     
     ctx.db.expense.insert({

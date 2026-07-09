@@ -2,8 +2,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as StDB from '../spacetimedb';
 import { useExpense } from '../module_bindings/hooks';
+import { resolveTier } from '../lib/tiers';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
+
+// SpacetimeDB Timestamp → epoch ms (defensive across SDK shapes).
+const tsToMs = (ts: any): number | null => {
+  try {
+    if (!ts) return null;
+    if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+    const micros = ts.microsSinceUnixEpoch ?? ts.__timestamp_micros_since_unix_epoch__ ?? ts.microsSinceEpoch;
+    if (micros != null) return Number(micros) / 1000;
+    if (typeof ts === 'bigint') return Number(ts) / 1000;
+    if (typeof ts === 'number') return ts > 2e12 ? ts / 1000 : ts;
+    const p = Date.parse(ts); return Number.isNaN(p) ? null : p;
+  } catch { return null; }
+};
 
 interface Props {
   open: boolean;
@@ -12,18 +26,6 @@ interface Props {
   onLogout: () => void;
   tripsCount: number;
 }
-
-type Stats = { created: number; added: number; settled: number; joined: number };
-
-// Tiers are resolved by behavior, highest priority first. All signals are client-side.
-const resolveTier = (s: Stats): { prefix: string; title: string; description: string } => {
-  if (s.created >= 3 && s.added >= 10 && s.settled >= 3) return { prefix: 'Congrats, you are a', title: 'Cosmic Legend', description: 'A legendary master of the cosmos, managing vast groups and flawless settlements.' };
-  if (s.created >= 3) return { prefix: 'Congrats, you are an', title: 'Initiator', description: 'You love bringing people together and sparking new journeys across the universe.' };
-  if (s.added >= 8) return { prefix: 'Congrats, you are a', title: 'Controller', description: 'A Controller is someone who likes to manage groups, stay on top of all expenses, and settles them up ASAP.' };
-  if (s.settled >= 3) return { prefix: 'Congrats, you are a', title: 'Peacemaker', description: 'You restore balance to the cosmos by swiftly settling debts and maintaining harmony.' };
-  if (s.joined >= 2 || s.added >= 1) return { prefix: 'Nice, you are an', title: 'Explorer', description: 'You are charting new territories and participating in group adventures.' };
-  return { prefix: 'Welcome, you are a', title: 'Newbie', description: 'Go explore the trenches of SIMPLI. Join groups and start adding expenses.' };
-};
 
 export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: Props) => {
   const expenses = useExpense();
@@ -36,7 +38,8 @@ export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: P
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  const stats: Stats = useMemo(() => {
+  // All tier signals are server-derived so the tier matches the leaderboard exactly.
+  const stats = useMemo(() => {
     const me = norm(StDB.getLocalId());
     let added = 0, settled = 0;
     for (const e of expenses) {
@@ -45,21 +48,45 @@ export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: P
       if (((e as any).description || '') === 'Debt settlement') settled++;
       else added++;
     }
-    let created = 0;
-    try { created = Number(localStorage.getItem('simpli_trips_created')) || 0; } catch {}
-    return { created, added, settled, joined: tripsCount };
+    return { added, settled, trips: tripsCount };
   }, [expenses, tripsCount, open]);
 
-  const tier = useMemo(() => resolveTier(stats), [stats]);
+  const tier = useMemo(() => resolveTier(stats.added, stats.settled, stats.trips), [stats]);
 
   const memberSince = useMemo(() => {
-    let iso = '';
-    try { iso = localStorage.getItem('simpli_member_since') || ''; } catch {}
-    const d = iso ? new Date(iso) : new Date();
-    const monthYear = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    const days = Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
-    return { monthYear, days };
-  }, [open]);
+    const now = Date.now();
+    // Oldest expense in the user's groups — a server-backed first-activity signal
+    // that survives localStorage clears and works across devices.
+    let earliest = Infinity;
+    for (const e of expenses) {
+      const ms = tsToMs((e as any).timestamp);
+      if (ms != null && ms < earliest) earliest = ms;
+    }
+    let stored = NaN;
+    try { const iso = localStorage.getItem('simpli_member_since'); if (iso) stored = new Date(iso).getTime(); } catch {}
+    let sinceMs = Math.min(
+      Number.isFinite(earliest) ? earliest : now,
+      Number.isNaN(stored) ? now : stored,
+    );
+    if (!Number.isFinite(sinceMs) || sinceMs > now) sinceMs = now;
+    const d = new Date(sinceMs);
+    return {
+      sinceMs,
+      monthYear: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      days: Math.max(0, Math.floor((now - sinceMs) / 86400000)),
+    };
+  }, [expenses, open]);
+
+  // Heal the stored first-seen date so the streak never resets newer than real activity.
+  useEffect(() => {
+    try {
+      const iso = localStorage.getItem('simpli_member_since');
+      const stored = iso ? new Date(iso).getTime() : NaN;
+      if (Number.isNaN(stored) || memberSince.sinceMs < stored) {
+        localStorage.setItem('simpli_member_since', new Date(memberSince.sinceMs).toISOString());
+      }
+    } catch {}
+  }, [memberSince.sinceMs]);
 
   return (
     <AnimatePresence>
@@ -127,7 +154,7 @@ export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: P
                 textShadow: '0 4px 20px rgba(255,196,107,0.3)',
                 margin: '8px 0', textAlign: 'center', lineHeight: 1.1
               }}>
-                {tier.title}
+                {tier.name}
               </div>
               
               <div style={{ fontSize: '0.9rem', color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.4, maxWidth: 300 }}>

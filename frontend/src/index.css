@@ -99,16 +99,11 @@ button:focus-visible, input:focus-visible {
 }
 .profile-avatar:active { transform: scale(0.95); }
 
-/* Leaderboard rows: hierarchical glow (top = brightest), staggered wave.
-   --row-shadow-lo / --row-shadow-hi / --row-delay are set per-row in JS. */
-@keyframes leaderGlow {
-  0%, 100% { box-shadow: var(--row-shadow-lo, none); }
-  50%      { box-shadow: var(--row-shadow-hi, none); }
-}
+/* Leaderboard rows: permanent, static hierarchy glow. --row-glow is set per-row
+   in JS (top three only, three distinct intensities). No pulsing animation. */
 .leader-row {
-  animation: leaderGlow 3.4s var(--ease-app) infinite;
-  animation-delay: var(--row-delay, 0s);
-  transition: transform var(--dur-element) var(--ease-app);
+  box-shadow: var(--row-glow, none);
+  transition: transform var(--dur-element) var(--ease-app), box-shadow var(--dur-element) var(--ease-app);
 }
 @media (hover: hover) {
   .leader-row:hover { transform: translateX(4px); }
