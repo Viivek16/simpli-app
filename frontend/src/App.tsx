@@ -5,7 +5,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion';
 import { initSpacetimeDB, onSpacetimeConnect, onSpacetimeDisconnect, onSubscriptionApplied } from './spacetimedb';
 import * as StDB from './spacetimedb';
 import { useExpense, useExpenseSplit, useUser } from './module_bindings/hooks';
@@ -98,6 +98,123 @@ const relTime = (ts: any): string => {
   return `${Math.floor(diffMs / 86_400_000)}d ago`;
 };
 
+// ─── Mobile ledger bottom-sheet ─────────────────────────────────────────────────
+// A draggable bottom sheet (mobile only). Opens to a half snap, can be dragged up to
+// fill the screen, and dragged / flicked down to dismiss back to the galaxy. Its
+// height is animated directly (not translated) so the inner scroll area always matches
+// the visible area — nothing is ever stranded below the fold at the half snap.
+const clampN = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+const MobileLedgerSheet = ({ open, onClose, children }: {
+  open: boolean; onClose: () => void; children: React.ReactNode;
+}) => {
+  const h = useMotionValue(0);
+  const dragging = useRef(false);
+  const startY = useRef(0);
+  const startH = useRef(0);
+  const lastY = useRef(0);
+  const lastT = useRef(0);
+  const vel = useRef(0);
+
+  const snaps = () => {
+    const H = typeof window !== 'undefined' ? window.innerHeight : 800;
+    return { HALF: Math.round(H * 0.62), FULL: Math.round(H - 40) };
+  };
+
+  // Slide to the half snap when opened, back to nothing when closed.
+  useEffect(() => {
+    const controls = animate(h, open ? snaps().HALF : 0, { type: 'spring', stiffness: 420, damping: 44 });
+    return () => controls.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const onMove = (e: PointerEvent) => {
+    if (!dragging.current) return;
+    const { FULL } = snaps();
+    const dy = e.clientY - startY.current;
+    h.set(clampN(startH.current - dy, 0, FULL));
+    const now = performance.now();
+    const dt = now - lastT.current;
+    if (dt > 0) vel.current = (e.clientY - lastY.current) / dt; // +ve = moving down
+    lastY.current = e.clientY;
+    lastT.current = now;
+  };
+
+  const endDrag = () => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', endDrag);
+    const { HALF, FULL } = snaps();
+    const cur = h.get();
+    const v = vel.current;
+    const MID = (HALF + FULL) / 2;
+    const CLOSE_LINE = HALF * 0.62;
+    let target: number;
+    if (v > 0.6) target = cur > MID ? HALF : 0;   // flick down → step down / dismiss
+    else if (v < -0.6) target = FULL;             // flick up → fill screen
+    else if (cur < CLOSE_LINE) target = 0;        // dragged low → dismiss
+    else if (cur > MID) target = FULL;            // dragged high → fill screen
+    else target = HALF;                           // settle back to half
+    if (target === 0) { onClose(); return; }      // open→false effect animates h→0
+    animate(h, target, { type: 'spring', stiffness: 420, damping: 44 });
+  };
+
+  const onHandleDown = (e: React.PointerEvent) => {
+    dragging.current = true;
+    startY.current = e.clientY;
+    startH.current = h.get();
+    lastY.current = e.clientY;
+    lastT.current = performance.now();
+    vel.current = 0;
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', endDrag);
+  };
+
+  return (
+    <motion.div
+      style={{
+        position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20, height: h,
+        display: 'flex', flexDirection: 'column', overflow: 'hidden', pointerEvents: 'all',
+        background: 'rgba(8, 10, 16, 0.86)',
+        backdropFilter: 'blur(30px) saturate(1.3)', WebkitBackdropFilter: 'blur(30px) saturate(1.3)',
+        borderTop: '1px solid var(--glass-brd)', borderRadius: '24px 24px 0 0',
+        boxShadow: '0 -12px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
+      }}
+    >
+      {/* Drag handle — the only surface that starts a drag, so the list still scrolls freely */}
+      <div
+        onPointerDown={onHandleDown}
+        style={{ flexShrink: 0, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', touchAction: 'none' }}
+      >
+        <div style={{ width: 40, height: 4, borderRadius: 4, background: 'rgba(255,255,255,0.25)' }} />
+      </div>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {children}
+      </div>
+    </motion.div>
+  );
+};
+
+// Ledger container that adapts by form factor: a fixed right panel on desktop, a
+// draggable bottom sheet on mobile. Same ledger content is rendered in both.
+const LedgerShell = ({ isMobile, open, onClose, children }: {
+  isMobile: boolean; open: boolean; onClose: () => void; children: React.ReactNode;
+}) => {
+  if (isMobile) {
+    return <MobileLedgerSheet open={open} onClose={onClose}>{children}</MobileLedgerSheet>;
+  }
+  return (
+    <div className="glass-panel right-panel-glass" style={{
+      pointerEvents: 'all', position: 'absolute', top: 72, right: 20, bottom: 24,
+      width: '340px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      background: 'rgba(5, 6, 10, 0.65)', borderRadius: '18px'
+    }}>
+      {children}
+    </div>
+  );
+};
+
 // ─── Trip Room ─────────────────────────────────────────────────────────────────
 interface EditPayload {
   expense: Expense;
@@ -120,6 +237,8 @@ const TripRoom = ({
   const [deleteExpenseLoading, setDeleteExpenseLoading] = useState<string | null>(null);
   const [mobileLedgerOpen, setMobileLedgerOpen] = useState(false);
   const isMobile = useIsMobile();
+  // On mobile, the Invite / Add-expense actions step aside while the ledger sheet is open.
+  const actionsHidden = isMobile && mobileLedgerOpen;
   const [settlePayload, setSettlePayload] = useState<{ payerId: string; payeeId: string; amount: number } | null>(null);
   const starPopupRef = useRef<HTMLDivElement>(null);
 
@@ -549,9 +668,11 @@ const TripRoom = ({
       {/* Bottom Actions */}
       <div style={isMobile ? {
         position: 'absolute', left: 0, right: 0, pointerEvents: 'none',
-        bottom: mobileLedgerOpen ? 'calc(62vh + 16px)' : 'calc(20px + env(safe-area-inset-bottom))',
+        bottom: 'calc(20px + env(safe-area-inset-bottom))',
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', zIndex: 20,
-        transition: 'bottom 0.4s cubic-bezier(0.32,0.72,0,1)'
+        opacity: actionsHidden ? 0 : 1,
+        transform: actionsHidden ? 'translateY(24px)' : 'translateY(0)',
+        transition: 'opacity 0.28s ease, transform 0.4s cubic-bezier(0.32,0.72,0,1)',
       } : {
         position: 'absolute', bottom: '24px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'all',
         display: 'flex', alignItems: 'center', gap: '12px', zIndex: 20
@@ -563,7 +684,7 @@ const TripRoom = ({
           background: 'rgba(5,6,10,0.72)', border: '1px solid rgba(255,255,255,0.14)',
           backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 0 : '8px',
-          color: '#ffffff', fontSize: '0.95rem', fontWeight: 600, pointerEvents: 'all',
+          color: '#ffffff', fontSize: '0.95rem', fontWeight: 600, pointerEvents: actionsHidden ? 'none' : 'all',
           paddingLeft: isMobile ? 0 : undefined, paddingRight: isMobile ? 0 : undefined,
         }}
         aria-label="Invite" title="Invite">
@@ -577,7 +698,7 @@ const TripRoom = ({
           background: 'linear-gradient(180deg, #FFC46B, #E8963A)', border: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           color: '#ffffff', fontSize: isMobile ? '0.9rem' : '0.95rem', fontWeight: 600,
-          boxShadow: '0 6px 18px rgba(232,150,58,0.35)', pointerEvents: 'all',
+          boxShadow: '0 6px 18px rgba(232,150,58,0.35)', pointerEvents: actionsHidden ? 'none' : 'all',
         }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           Add expense
@@ -586,12 +707,8 @@ const TripRoom = ({
 
       {/* Mobile ledger access is on the balance status bar under the header now. */}
 
-      {/* Right panel — Ledger */}
-      <div className={`glass-panel right-panel-glass ${mobileLedgerOpen ? 'mobile-open' : ''}`} style={{
-        pointerEvents: 'all', position: 'absolute', top: 72, right: 20, bottom: 24,
-        width: '340px', display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        background: 'rgba(5, 6, 10, 0.65)', borderRadius: '18px'
-      }}>
+      {/* Ledger — fixed right panel on desktop, draggable bottom sheet on mobile */}
+      <LedgerShell isMobile={isMobile} open={mobileLedgerOpen} onClose={() => setMobileLedgerOpen(false)}>
         <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -742,7 +859,7 @@ const TripRoom = ({
             ))
           )}
         </div>
-      </div>
+      </LedgerShell>
 
       {/* Insights panel */}
       <AnimatePresence>
@@ -1021,10 +1138,11 @@ const SettledSectorControl = ({
   const isMobile = useIsMobile();
   const active = homeView === 'active';
 
-  // Show full, then collapse to the compact tab after a beat — replays on view change.
+  // Show full, then collapse to the compact tab after a brief beat (~1.5s) — replays on
+  // view change. Kept short so it introduces itself without lingering over the cosmos.
   useEffect(() => {
     setExpanded(true);
-    const t = window.setTimeout(() => setExpanded(false), 2400);
+    const t = window.setTimeout(() => setExpanded(false), 1500);
     return () => window.clearTimeout(t);
   }, [homeView]);
 
@@ -1515,6 +1633,7 @@ function App() {
           onSelectedStarPosUpdate={setSelectedStarPos}
           homeView={homeView}
           onSectorCounts={setSectorCounts}
+          ready={subReady}
         />
       </ErrorBoundary>
 

@@ -431,7 +431,7 @@ const CameraAnimator = ({
 };
 
 // Wrapper to share state between the canvas and the DOM
-const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, tripBalances, selectedMemberId, onSelectedStarPosUpdate, homeView }: {
+const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, tripBalances, selectedMemberId, onSelectedStarPosUpdate, homeView, ready }: {
   activeTripId: string | null;
   trips: Trip[];
   onSelectTrip: (t: Trip) => void;
@@ -443,6 +443,7 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
   selectedMemberId?: string | null;
   onSelectedStarPosUpdate?: (pos: { x: number, y: number } | null) => void;
   homeView: HomeView;
+  ready: boolean;
 }) => {
   const [hoveredTripId, setHoveredTripId] = useState<string | null>(null);
   const [settling, setSettling] = useState(false);
@@ -539,8 +540,9 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
           />
         )}
 
-        {/* ── Macro View: only the current sector's galaxies are shown/interactive ── */}
-        {!(activeTripId && settled) && layout.items.map(({ trip, pos, cols, idx, sector }) => {
+        {/* ── Macro View: only the current sector's galaxies are shown/interactive.
+             Held back until `ready` so trips render already-classified (no active-sector flash). ── */}
+        {ready && !(activeTripId && settled) && layout.items.map(({ trip, pos, cols, idx, sector }) => {
           const bal = tripBalances[trip.id] || { settled: false, netBalances: null };
           const hidden = activeTripId !== null || sector !== homeView;
           return (
@@ -600,9 +602,12 @@ interface GBProps {
   onSelectedStarPosUpdate?: (pos: { x: number, y: number } | null) => void;
   homeView?: HomeView;
   onSectorCounts?: (counts: { active: number; settled: number }) => void;
+  // Only render/classify galaxies once subscription data is live, so settled groups never
+  // flash in the active sector before their balances are known.
+  ready?: boolean;
 }
 
-export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, selectedMemberId, onSelectedStarPosUpdate, homeView = 'active', onSectorCounts }: GBProps) => {
+export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, hoveredStar, onStarHover, onStarClick, selectedMemberId, onSelectedStarPosUpdate, homeView = 'active', onSectorCounts, ready = true }: GBProps) => {
   const expenses = useExpense();
   const splits = useExpenseSplit();
   const allUsers = useUser();
@@ -690,6 +695,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
             onSelectedStarPosUpdate={onSelectedStarPosUpdate}
             tripBalances={tripBalances}
             homeView={homeView}
+            ready={ready}
           />
         </Canvas>
       </ErrorBoundary>
