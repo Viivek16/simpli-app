@@ -124,6 +124,8 @@ button:focus-visible, input:focus-visible {
   .trophy-btn:hover, .profile-avatar:hover, .leader-row:hover, .lift:hover { transform: none; }
   /* Login: freeze aurora drift, glow, and twinkle; show the final composed state */
   .login-aurora, .login-glow, .login-star { animation: none !important; }
+  /* Onboarding: freeze the create-field coach pulse (framer motifs handle their own) */
+  .coach-glow::after { animation: none !important; }
 }
 
 /* Glass system utilities */
@@ -480,3 +482,65 @@ button:focus-visible, input:focus-visible {
   content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
   background: radial-gradient(130% 80% at 50% 0%, rgba(255, 255, 255, 0.07), transparent 58%);
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Onboarding: gated first-run overlay (DOM + SVG + framer over the live cosmos)
+   ─────────────────────────────────────────────────────────────────────────── */
+.onb-overlay {
+  position: fixed; inset: 0; z-index: 90; pointer-events: all;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  padding: max(28px, env(safe-area-inset-top)) 24px max(28px, env(safe-area-inset-bottom));
+  background: radial-gradient(120% 90% at 50% 32%, rgba(4, 6, 12, 0.5), rgba(2, 4, 8, 0.8));
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+}
+.onb-beat {
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  width: 100%; max-width: 460px;
+}
+.onb-motif { margin-bottom: 2px; }
+.onb-title {
+  margin: 0; font-size: clamp(1.4rem, 5vw, 1.9rem); font-weight: 700;
+  color: var(--text); line-height: 1.2; letter-spacing: -0.02em;
+}
+.onb-body { margin: 0; font-size: 0.98rem; color: var(--text-dim); line-height: 1.55; max-width: 30rem; }
+.onb-cta {
+  margin-top: 8px; height: 50px; padding: 0 30px; border: none; border-radius: 14px;
+  font-family: inherit; font-weight: 700; font-size: 0.98rem; color: #ffffff; cursor: pointer;
+  background: linear-gradient(180deg, #FFC46B, #E8963A);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 8px 22px rgba(232, 150, 58, 0.4);
+  transition: transform var(--dur-micro) var(--ease-app), box-shadow var(--dur-micro) var(--ease-app);
+}
+.onb-cta:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 10px 26px rgba(232, 150, 58, 0.5); }
+.onb-cta:active { transform: translateY(1px); }
+.onb-pills { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 340px; margin-top: 2px; }
+.onb-pill {
+  width: 100%; padding: 15px 20px; border-radius: 14px; cursor: pointer;
+  font-family: inherit; font-size: 0.98rem; font-weight: 600; color: var(--text); text-align: center;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-brd);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+  transition: transform var(--dur-micro) var(--ease-app), background var(--dur-micro) var(--ease-app), border-color var(--dur-micro) var(--ease-app);
+}
+.onb-pill:hover { background: rgba(255, 183, 77, 0.12); border-color: rgba(255, 183, 77, 0.4); transform: translateY(-1px); }
+.onb-pill:active { transform: translateY(1px); }
+.onb-textlink {
+  margin-top: 4px; background: none; border: none; cursor: pointer;
+  font-family: inherit; font-size: 0.82rem; color: var(--text-dim); opacity: 0.7;
+  transition: opacity var(--dur-micro) var(--ease-app);
+}
+.onb-textlink:hover { opacity: 1; }
+.onb-skip {
+  position: absolute; top: max(20px, env(safe-area-inset-top)); right: 20px;
+  background: none; border: none; cursor: pointer;
+  font-family: inherit; font-size: 0.8rem; color: var(--text-dim); opacity: 0.45;
+  transition: opacity var(--dur-micro) var(--ease-app);
+}
+.onb-skip:hover { opacity: 0.9; }
+
+/* Post-onboarding coach highlight on the real create field (warm --self ring). */
+.coach-glow::after {
+  content: ''; position: absolute; inset: -2px; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 1.5px rgba(255, 183, 77, 0.5), 0 0 22px 2px rgba(255, 183, 77, 0.35);
+  animation: coachPulse 1.8s var(--ease-app) infinite;
+}
+@keyframes coachPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }

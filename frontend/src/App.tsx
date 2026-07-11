@@ -20,6 +20,7 @@ import { ExpenseModal } from './components/ExpenseModal';
 import { GalaxyBackground, type HomeView } from './components/GalaxyBackground';
 import { LeaderboardSidebar } from './components/LeaderboardSidebar';
 import { ProfileModal } from './components/ProfileModal';
+import { Onboarding } from './components/Onboarding';
 import { SettleModal } from './components/SettleModal';
 import { NotificationsManager } from './components/NotificationsManager';
 import { selfDeletedTrips } from './notifications';
@@ -1203,15 +1204,27 @@ const SettledSectorControl = ({
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 const Dashboard = ({
   profile, isConnected, onOpenProfile, onOpenLeaderboard, onSelectTrip, subReady, trips,
-  homeView, onSetHomeView, sectorCounts,
+  homeView, onSetHomeView, sectorCounts, coachCreate, onCoachConsumed,
 }: {
   profile: GoogleProfile; isConnected: boolean; onOpenProfile: () => void; onOpenLeaderboard: () => void;
   onSelectTrip: (t: Trip) => void; subReady: boolean; trips: Trip[];
   homeView: HomeView; onSetHomeView: (v: HomeView) => void; sectorCounts: { active: number; settled: number };
+  coachCreate?: boolean; onCoachConsumed?: () => void;
 }) => {
   const [newTripName, setNewTripName] = useState('');
   const [creating, setCreating] = useState(false);
   const isMobile = useIsMobile();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Post-onboarding coach: focus the real create field and glow it, then release on a
+  // timer or the first keystroke (onChange), whichever comes first.
+  // ponytail: skipped a separate focus-to-clear trigger, autofocus would clear it instantly.
+  useEffect(() => {
+    if (!coachCreate) return;
+    inputRef.current?.focus();
+    const t = window.setTimeout(() => onCoachConsumed?.(), 4000);
+    return () => window.clearTimeout(t);
+  }, [coachCreate, onCoachConsumed]);
 
   const handleCreate = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1336,7 +1349,7 @@ const Dashboard = ({
         <form onSubmit={handleCreate} style={{
           display: 'flex', gap: isMobile ? '8px' : '10px'
         }}>
-          <div style={{
+          <div className={coachCreate ? 'coach-glow' : undefined} style={{
             flex: 1, position: 'relative', display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px',
             background: 'rgba(255,255,255,0.06)',
             border: '1px solid rgba(255,255,255,0.16)', borderRadius: isMobile ? '12px' : '14px',
@@ -1348,7 +1361,8 @@ const Dashboard = ({
               <path d="M12 3v18M3 12h18" />
             </svg>
             <input
-              value={newTripName} onChange={e => setNewTripName(e.target.value)}
+              ref={inputRef}
+              value={newTripName} onChange={e => { setNewTripName(e.target.value); if (coachCreate) onCoachConsumed?.(); }}
               placeholder="Create a new group / galaxy..."
               style={{
                 width: '100%', background: 'transparent', border: 'none', padding: isMobile ? '0 14px 0 0' : '0 18px 0 0', color: 'var(--text)',
@@ -1511,6 +1525,12 @@ function App() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  // Onboarding: whether we arrived via an invite is captured once at mount and frozen,
+  // because the URL is rewritten to /t/... after an auto-join. showOnboarding latches on
+  // and coachCreate briefly highlights the real create field after the handoff.
+  const [arrivedViaInvite] = useState(() => /^\/t\//.test(window.location.pathname) || !!sessionStorage.getItem('simpli_pending_trip'));
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [coachCreate, setCoachCreate] = useState(false);
   const [homeView, setHomeView] = useState<HomeView>('active');
   const [sectorCounts, setSectorCounts] = useState<{ active: number; settled: number }>({ active: 0, settled: 0 });
   // If nothing is settled anymore, fall back to the active sector automatically.
@@ -1528,6 +1548,17 @@ function App() {
     }
   }, [subReady, trips]);
   const displayTrips = (subReady ? trips : (cachedTrips.length ? cachedTrips : trips)) as Trip[];
+
+  // Show onboarding only for a fresh, logged-in, non-invited account with no groups yet.
+  // Latches once shown (the early return) so a late trip sync can't yank it mid-flow.
+  useEffect(() => {
+    if (showOnboarding) return;
+    if (arrivedViaInvite || localStorage.getItem('simpli_onboarded')) return;
+    if (profile && subReady && trips.length === 0) setShowOnboarding(true);
+  }, [profile, subReady, trips.length, arrivedViaInvite, showOnboarding]);
+
+  // Stable so Dashboard's coach effect runs once (frequent re-renders won't reset its timer).
+  const clearCoach = useCallback(() => setCoachCreate(false), []);
 
   const selectTrip = useCallback((t: Trip | null) => {
     if (t) {
@@ -1715,10 +1746,26 @@ function App() {
                   homeView={homeView}
                   onSetHomeView={setHomeView}
                   sectorCounts={sectorCounts}
+                  coachCreate={coachCreate}
+                  onCoachConsumed={clearCoach}
                 />
               )}
             </AnimatePresence>
           </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {profile && showOnboarding && (
+          <Onboarding
+            key="onboarding"
+            firstName={profile.name.split(' ')[0]}
+            onDone={() => {
+              try { localStorage.setItem('simpli_onboarded', '1'); } catch {}
+              setShowOnboarding(false);
+              setCoachCreate(true);
+            }}
+          />
         )}
       </AnimatePresence>
 
