@@ -37,10 +37,68 @@
       ::-webkit-scrollbar { width: 4px; height: 4px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+
+      /* Boot splash — paints on the very first frame (before the JS bundle) so there is
+         never a dead black screen, then zooms/fades out the moment the cosmos is live. */
+      #boot-splash {
+        position: fixed; inset: 0; z-index: 100000;
+        display: flex; align-items: center; justify-content: center;
+        background: #020508; overflow: hidden;
+        transition: opacity .7s ease, transform .8s cubic-bezier(.4, 0, .2, 1);
+        will-change: opacity, transform;
+      }
+      #boot-splash.boot-splash--hidden { opacity: 0; transform: scale(1.22); pointer-events: none; }
+      #boot-splash .bs-glow {
+        position: absolute; width: min(82vw, 560px); aspect-ratio: 1; border-radius: 50%;
+        background: radial-gradient(circle, rgba(255,183,77,.20) 0%, rgba(120,90,255,.10) 40%, transparent 70%);
+        filter: blur(22px); animation: bsGlow 3.2s ease-in-out infinite alternate;
+      }
+      #boot-splash .bs-core { position: relative; display: flex; flex-direction: column; align-items: center; gap: 16px; animation: bsFloat 2.6s ease-in-out infinite alternate; }
+      #boot-splash .bs-bolt { filter: drop-shadow(0 0 18px rgba(255,183,77,.55)); animation: bsPulse 1.5s ease-in-out infinite; }
+      #boot-splash .bs-word { font-family: 'Clash Display', 'Satoshi', system-ui, sans-serif; font-weight: 700; letter-spacing: .42em; padding-left: .42em; font-size: 1.4rem; color: #f4f5f7; opacity: .92; }
+      @keyframes bsGlow { from { transform: scale(.72); opacity: .5; } to { transform: scale(1.08); opacity: .95; } }
+      @keyframes bsFloat { from { transform: translateY(3px) scale(.99); } to { transform: translateY(-3px) scale(1.01); } }
+      @keyframes bsPulse { 0%, 100% { opacity: .85; } 50% { opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash .bs-glow, #boot-splash .bs-core, #boot-splash .bs-bolt { animation: none; }
+        #boot-splash { transition: opacity .4s ease; }
+        #boot-splash.boot-splash--hidden { transform: none; }
+      }
     </style>
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Instant boot splash (item 5): visible on the first paint, lifted by the app the
+         moment the WebGL cosmos is created — a seamless zoom into the galaxy. -->
+    <div id="boot-splash" aria-hidden="true">
+      <div class="bs-glow"></div>
+      <div class="bs-core">
+        <svg class="bs-bolt" width="60" height="58" viewBox="0 0 48 46" fill="none">
+          <defs><linearGradient id="bsBolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFC46B" /><stop offset="100%" stop-color="#E8963A" /></linearGradient></defs>
+          <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#bsBolt)" />
+        </svg>
+        <div class="bs-word">SIMPLI</div>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var start = Date.now(), MIN = 650;
+        window.__hideBootSplash = function () {
+          if (window.__bsHidden) return; window.__bsHidden = true;
+          var go = function () {
+            var el = document.getElementById('boot-splash');
+            if (!el) return;
+            el.classList.add('boot-splash--hidden');
+            setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 820);
+          };
+          setTimeout(go, Math.max(0, MIN - (Date.now() - start)));
+        };
+        // Safety net: never let the splash stick if the Canvas never signals (e.g. WebGL unavailable).
+        setTimeout(function () { window.__hideBootSplash(); }, 6000);
+      })();
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

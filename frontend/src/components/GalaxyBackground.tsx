@@ -282,7 +282,7 @@ const prefersReducedMotion = () =>
 
 const STARFIELD_COUNT = 3500;
 
-const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string | null; settled: boolean }) => {
+const BackgroundStarfield = ({ activeTripId }: { activeTripId: string | null }) => {
   const ref = useRef<THREE.Points>(null);
   const geomRef = useRef<THREE.BufferGeometry>(null);
   const parallaxRef = useRef<THREE.Group>(null);
@@ -318,7 +318,9 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
   useFrame((state, delta) => {
     if (!ref.current) return;
     const mat = ref.current.material as THREE.PointsMaterial;
-    const targetOpacity = activeTripId ? 0 : 0.22;
+    // Keep the starfield alive on every screen (item 2) — dimmer inside a galaxy so it
+    // sits behind the constellation rather than fighting it.
+    const targetOpacity = activeTripId ? 0.14 : 0.22;
     mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.05);
     ref.current.rotation.y += delta * 0.018; // slow global drift
     ref.current.rotation.x += delta * 0.004;
@@ -344,8 +346,10 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
     const attr = geo.attributes.position as THREE.BufferAttribute;
     const arr = attr.array as Float32Array;
 
-    if (enableParallax && !activeTripId) {
-      const R = 30, R2 = R * R, MAXPUSH = 16, DIST = 90, EASE = 0.14;
+    if (enableParallax) {
+      // item 1: tighter sphere + gentler shove so the sparse field isn't flung too far.
+      // item 2: runs on every screen (home, settled sector, inside a galaxy), not just home.
+      const R = 20, R2 = R * R, MAXPUSH = 10, DIST = 90, EASE = 0.14;
       scratch.ndc.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
       scratch.dir.copy(scratch.ndc).sub(state.camera.position).normalize();
       scratch.center.copy(state.camera.position).addScaledVector(scratch.dir, DIST);
@@ -378,8 +382,6 @@ const BackgroundStarfield = ({ activeTripId, settled }: { activeTripId: string |
       if (moved) attr.needsUpdate = true;
     }
   });
-
-  if (activeTripId && settled) return null;
 
   return (
     <group ref={parallaxRef}>
@@ -515,16 +517,12 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
         autoRotate={!activeTripId && !uiPaused && !flying && !isPhoneNow()} autoRotateSpeed={0.3}
         minDistance={isPhoneNow() ? (activeTripId ? 5 : 6) : 4}
         maxDistance={isPhoneNow() ? (activeTripId ? 60 : 42) : 140}
-        minPolarAngle={isPhoneNow() && !activeTripId ? 0.7 : 0}
-        maxPolarAngle={isPhoneNow() && !activeTripId ? 1.35 : Math.PI}
-        minAzimuthAngle={isPhoneNow() && !activeTripId ? -0.6 : -Infinity}
-        maxAzimuthAngle={isPhoneNow() && !activeTripId ? 0.6 : Infinity}
       />
 
       {/* Camera fly-in / sector zoop: only runs during the settle window */}
       <CameraAnimator targetPos={targetPos.current} settling={flying} duration={settleDuration} />
 
-      <BackgroundStarfield activeTripId={activeTripId} settled={settled} />
+      <BackgroundStarfield activeTripId={activeTripId} />
 
       <ErrorBoundary fallback={null}>
         {activeTripId && (
@@ -681,6 +679,9 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
           dpr={[1, 1.5]}
           frameloop={uiPaused ? 'never' : 'always'}
           style={{ pointerEvents: uiPaused ? 'none' : 'all' }}
+          // Lift the boot splash the instant the WebGL renderer is live, so the fade
+          // hands straight off to the camera fly-in (item 5).
+          onCreated={() => { try { (window as any).__hideBootSplash?.(); } catch { /* no-op */ } }}
         >
           <Preload all />
           <GalaxyScene

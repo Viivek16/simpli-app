@@ -2,7 +2,7 @@
  * SIMPLI — App.tsx
  * Phases 1–5 integrated
  */
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import { GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { motion, AnimatePresence, useMotionValue, animate, useReducedMotion } from 'framer-motion';
@@ -17,7 +17,7 @@ import { useIsMobile } from './hooks/useIsMobile';
 import { resolveNames } from './lib/names';
 import { buildOwesMap, pairNet } from './lib/ledger';
 import { ExpenseModal } from './components/ExpenseModal';
-import { GalaxyBackground, type HomeView } from './components/GalaxyBackground';
+import type { HomeView } from './components/GalaxyBackground';
 import { LeaderboardSidebar } from './components/LeaderboardSidebar';
 import { ProfileModal } from './components/ProfileModal';
 import { Onboarding } from './components/Onboarding';
@@ -27,6 +27,13 @@ import { selfDeletedTrips } from './notifications';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster, toast } from './components/Toast';
 import { AudioService } from './audio';
+
+// The WebGL cosmos (three.js + drei + postprocessing ≈ 1.2 MB) is code-split so the app
+// shell parses and paints immediately instead of waiting on the whole bundle. The boot
+// splash in index.html covers the brief gap until the Canvas is created (item 5).
+const GalaxyBackground = lazy(() =>
+  import('./components/GalaxyBackground').then(m => ({ default: m.GalaxyBackground }))
+);
 
 const EO = [0.23, 1, 0.32, 1] as const;
 const INR = (v: number) =>
@@ -122,9 +129,9 @@ const MobileLedgerSheet = ({ open, onClose, children }: {
     return { HALF: Math.round(H * 0.62), FULL: Math.round(H - 40) };
   };
 
-  // Slide to the half snap when opened, back to nothing when closed.
+  // Open straight to full screen (item 4); drag/flick down to dismiss or step to the half snap.
   useEffect(() => {
-    const controls = animate(h, open ? snaps().HALF : 0, { type: 'spring', stiffness: 420, damping: 44 });
+    const controls = animate(h, open ? snaps().FULL : 0, { type: 'spring', stiffness: 420, damping: 44 });
     return () => controls.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -172,8 +179,16 @@ const MobileLedgerSheet = ({ open, onClose, children }: {
     window.addEventListener('pointerup', endDrag);
   };
 
+  // A drag starts from any surface marked [data-ledger-drag] (the grabber + the balance
+  // header), giving a generous grab zone (item 4). The scroll list has no such marker, so
+  // it still scrolls freely.
+  const startDragIfHandle = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('[data-ledger-drag]')) onHandleDown(e);
+  };
+
   return (
     <motion.div
+      onPointerDown={startDragIfHandle}
       style={{
         position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20, height: h,
         display: 'flex', flexDirection: 'column', overflow: 'hidden', pointerEvents: 'all',
@@ -183,12 +198,12 @@ const MobileLedgerSheet = ({ open, onClose, children }: {
         boxShadow: '0 -12px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)',
       }}
     >
-      {/* Drag handle — the only surface that starts a drag, so the list still scrolls freely */}
+      {/* Grabber — a taller, easy-to-hit band that drags the sheet up/down (item 4) */}
       <div
-        onPointerDown={onHandleDown}
-        style={{ flexShrink: 0, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', touchAction: 'none' }}
+        data-ledger-drag
+        style={{ flexShrink: 0, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', touchAction: 'none' }}
       >
-        <div style={{ width: 40, height: 4, borderRadius: 4, background: 'rgba(255,255,255,0.25)' }} />
+        <div style={{ width: 44, height: 5, borderRadius: 4, background: 'rgba(255,255,255,0.28)' }} />
       </div>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {children}
@@ -710,7 +725,8 @@ const TripRoom = ({
 
       {/* Ledger — fixed right panel on desktop, draggable bottom sheet on mobile */}
       <LedgerShell isMobile={isMobile} open={mobileLedgerOpen} onClose={() => setMobileLedgerOpen(false)}>
-        <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {/* data-ledger-drag: on mobile this header is a drag surface for the sheet (item 4); inert on desktop */}
+        <div data-ledger-drag style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--glass-brd)', display: 'flex', flexDirection: 'column', gap: '4px', touchAction: isMobile ? 'none' : undefined }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '8px' }}>
               {headerContext.type === 'overall' ? 'Your Balance' : `${headerContext.name}'s Balance with you`}
@@ -1698,20 +1714,22 @@ function App() {
       {profile && <NotificationsManager />}
 
       <ErrorBoundary fallback={<div style={{ position: 'fixed', inset: 0, background: '#020508' }} />}>
-        <GalaxyBackground
-          trips={displayTrips}
-          activeTripId={selectedTrip?.id ?? null}
-          onSelectTrip={selectTrip}
-          uiPaused={overlayOpen}
-          hoveredStar={hoveredStar}
-          onStarHover={setHoveredStar}
-          onStarClick={setSelectedMemberId}
-          selectedMemberId={selectedMemberId}
-          onSelectedStarPosUpdate={setSelectedStarPos}
-          homeView={homeView}
-          onSectorCounts={setSectorCounts}
-          ready={subReady}
-        />
+        <Suspense fallback={null}>
+          <GalaxyBackground
+            trips={displayTrips}
+            activeTripId={selectedTrip?.id ?? null}
+            onSelectTrip={selectTrip}
+            uiPaused={overlayOpen}
+            hoveredStar={hoveredStar}
+            onStarHover={setHoveredStar}
+            onStarClick={setSelectedMemberId}
+            selectedMemberId={selectedMemberId}
+            onSelectedStarPosUpdate={setSelectedStarPos}
+            homeView={homeView}
+            onSectorCounts={setSectorCounts}
+            ready={subReady}
+          />
+        </Suspense>
       </ErrorBoundary>
 
       <AnimatePresence mode="wait">
