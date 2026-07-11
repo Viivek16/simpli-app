@@ -5,7 +5,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
-import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, animate, useReducedMotion } from 'framer-motion';
 import { initSpacetimeDB, onSpacetimeConnect, onSpacetimeDisconnect, onSubscriptionApplied } from './spacetimedb';
 import * as StDB from './spacetimedb';
 import { useExpense, useExpenseSplit, useUser } from './module_bindings/hooks';
@@ -1380,16 +1380,35 @@ const Dashboard = ({
 };
 
 // ─── Login View ────────────────────────────────────────────────────────────────
-const LoginView = ({ onLogin }: { onLogin: (p: GoogleProfile) => void }) => {
-  const [dbReady, setDbReady] = useState(!!StDB.conn);
-  const [dbError, setDbError] = useState<string | null>(null);
+// Twinkling starfield for the login backdrop (DOM/SVG only, no WebGL). Positions live
+// in a 0..100 space rendered with preserveAspectRatio="none".
+const LOGIN_STARS = [
+  { cx: 8,  cy: 14, r: 0.32, d: 0.2, t: 4.5 },
+  { cx: 18, cy: 62, r: 0.24, d: 1.4, t: 5.5 },
+  { cx: 26, cy: 28, r: 0.40, d: 0.8, t: 4.0 },
+  { cx: 33, cy: 82, r: 0.22, d: 2.1, t: 6.0 },
+  { cx: 42, cy: 18, r: 0.30, d: 1.1, t: 5.0 },
+  { cx: 48, cy: 70, r: 0.26, d: 0.4, t: 4.8 },
+  { cx: 57, cy: 12, r: 0.36, d: 1.8, t: 5.2 },
+  { cx: 63, cy: 46, r: 0.20, d: 2.6, t: 6.2 },
+  { cx: 71, cy: 24, r: 0.30, d: 0.6, t: 4.4 },
+  { cx: 78, cy: 66, r: 0.34, d: 1.5, t: 5.6 },
+  { cx: 86, cy: 34, r: 0.24, d: 2.3, t: 5.0 },
+  { cx: 92, cy: 74, r: 0.28, d: 0.9, t: 4.6 },
+  { cx: 14, cy: 88, r: 0.26, d: 1.9, t: 5.8 },
+  { cx: 5,  cy: 42, r: 0.22, d: 2.8, t: 6.0 },
+  { cx: 37, cy: 52, r: 0.18, d: 1.2, t: 4.2 },
+  { cx: 52, cy: 90, r: 0.30, d: 0.3, t: 5.4 },
+  { cx: 68, cy: 84, r: 0.22, d: 2.0, t: 5.0 },
+  { cx: 82, cy: 8,  r: 0.28, d: 1.0, t: 4.8 },
+  { cx: 95, cy: 52, r: 0.20, d: 1.6, t: 6.1 },
+  { cx: 22, cy: 40, r: 0.24, d: 0.7, t: 5.2 },
+  { cx: 60, cy: 60, r: 0.18, d: 2.4, t: 4.6 },
+  { cx: 45, cy: 36, r: 0.22, d: 1.3, t: 5.6 },
+];
 
-  useEffect(() => {
-    const u1 = onSpacetimeConnect(() => setDbReady(true));
-    const u2 = StDB.onSpacetimeConnectError(e => setDbError(e.message));
-    if (StDB.conn) setDbReady(true);
-    return () => { u1(); u2(); };
-  }, []);
+const LoginView = ({ onLogin }: { onLogin: (p: GoogleProfile) => void }) => {
+  const reduce = useReducedMotion();
 
   const handleSuccess = (res: any) => {
     try {
@@ -1402,45 +1421,72 @@ const LoginView = ({ onLogin }: { onLogin: (p: GoogleProfile) => void }) => {
     } catch (e) { console.error('[SIMPLI] JWT decode failed', e); }
   };
 
+  // Card eases in; wordmark, tagline, then button rise in sequence (Emil Kowalski timing).
+  // Object-form transitions (matching the rest of the app) so frequent parent re-renders
+  // never stall the entrance. Reduced motion collapses it into a single calm fade.
+  const rise = (delay: number) =>
+    reduce
+      ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.3 } }
+      : { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, ease: EO, delay } };
+
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'var(--bg-grad)', zIndex: -2 }}></div>
-      <div style={{
-        position: 'absolute', top: '50%', left: '50%', width: 300, height: 300,
-        transform: 'translate(-50%, -50%)',
-        background: 'radial-gradient(circle, rgba(167, 139, 250, 0.15) 0%, rgba(94, 230, 255, 0.15) 40%, transparent 70%)',
-        zIndex: -1, animation: 'bloomFadeIn 2s ease-out forwards', filter: 'blur(40px)'
-      }}></div>
+    <div className="login-root" style={{
+      position: 'fixed', inset: 0, zIndex: 50, overflow: 'hidden',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 'max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
+    }}>
+      {/* Cosmos backdrop: aurora, twinkle, and one slow drifting glow (CSS + SVG only) */}
+      <div className="login-cosmos" aria-hidden="true">
+        <div className="login-aurora a1" />
+        <div className="login-aurora a2" />
+        <div className="login-aurora a3" />
+        <div className="login-glow" />
+        <svg className="login-stars" viewBox="0 0 100 100" preserveAspectRatio="none">
+          {LOGIN_STARS.map((s, i) => (
+            <circle key={i} className="login-star" cx={s.cx} cy={s.cy} r={s.r}
+              style={{ animationDelay: `${s.d}s`, animationDuration: `${s.t}s` }} />
+          ))}
+        </svg>
+      </div>
+
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="glass-panel"
+        className="glass-panel login-card"
+        initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.965, y: 8 }}
+        animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+        transition={reduce ? { duration: 0.3 } : { duration: 0.6, ease: EO }}
         style={{
-          width: '100%', maxWidth: '380px',
-          padding: '48px 32px',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '28px',
+          position: 'relative', width: 'min(340px, 100%)',
+          padding: '44px 28px 34px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '22px',
         }}
       >
-        <div style={{ textAlign: 'center' }}>
-          <h1 className="font-clash" style={{ margin: 0, fontSize: '1.75rem', fontWeight: 700, color: 'var(--text)' }}>SIMPLI</h1>
-          <p style={{ margin: '8px 0 0', color: 'var(--text-dim)', fontSize: '0.95rem', fontWeight: 500 }}>
-            Split expenses in a living cosmos.
+        {/* Wordmark: gradient bolt above SIMPLI, matching the in-app headers */}
+        <motion.div {...rise(0.18)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+          <svg width="42" height="40" viewBox="0 0 48 46" fill="none" aria-hidden="true">
+            <defs><linearGradient id="simpliBoltLogin" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
+            <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltLogin)" />
+          </svg>
+          <h1 className="font-clash" style={{ margin: 0, fontSize: 'clamp(1.9rem, 7vw, 2.15rem)', fontWeight: 700, letterSpacing: '0.16em', paddingLeft: '0.16em', color: 'var(--text)' }}>SIMPLI</h1>
+        </motion.div>
+
+        {/* Tagline */}
+        <motion.p {...rise(0.27)} style={{ margin: '-6px 0 0', color: 'var(--text-dim)', fontSize: '0.95rem', fontWeight: 500, textAlign: 'center', lineHeight: 1.45 }}>
+          Split expenses in a living cosmos.
+        </motion.p>
+
+        {/* Google auth: official component, sized to the card so it reads as designed */}
+        <motion.div {...rise(0.4)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', width: '100%' }}>
+          <div style={{ minHeight: 44, display: 'flex', justifyContent: 'center', width: '100%' }}>
+            <GoogleLogin
+              onSuccess={handleSuccess}
+              onError={() => toast.error('Google login failed')}
+              theme="filled_black" shape="pill" size="large" width="300" text="continue_with" useOneTap={false}
+            />
+          </div>
+          <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-dim)', opacity: 0.75, textAlign: 'center', lineHeight: 1.4, maxWidth: '260px' }}>
+            No password. We only use this to save your cosmos.
           </p>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', background: 'var(--glass)', borderRadius: '12px', width: '100%', justifyContent: 'center' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: dbError ? 'var(--owe)' : dbReady ? 'var(--owed)' : '#444', boxShadow: dbReady ? '0 0 8px var(--owed)' : 'none' }} />
-          <span style={{ fontSize: '0.75rem', color: dbError ? 'var(--owe)' : dbReady ? 'var(--owed)' : 'var(--text-dim)', fontWeight: 500 }}>
-            {dbError ? `Error: ${dbError}` : dbReady ? 'Database connected' : 'Connecting…'}
-          </span>
-        </div>
-
-        <GoogleLogin
-          onSuccess={handleSuccess}
-          onError={() => toast.error('Google login failed')}
-          theme="filled_black" shape="rectangular" size="large" width="296" text="continue_with" useOneTap={false}
-        />
+        </motion.div>
       </motion.div>
     </div>
   );

@@ -122,6 +122,8 @@ button:focus-visible, input:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .trophy-btn, .leader-row { animation: none !important; }
   .trophy-btn:hover, .profile-avatar:hover, .leader-row:hover, .lift:hover { transform: none; }
+  /* Login: freeze aurora drift, glow, and twinkle; show the final composed state */
+  .login-aurora, .login-glow, .login-star { animation: none !important; }
 }
 
 /* Glass system utilities */
@@ -419,4 +421,62 @@ button:focus-visible, input:focus-visible {
   .mobile-ledger-btn {
     bottom: calc(24px + env(safe-area-inset-bottom)) !important;
   }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Login: cosmos entry backdrop (DOM/SVG/CSS only, no WebGL). Subtle and dark,
+   near-black base, so the glass card floats.
+   ─────────────────────────────────────────────────────────────────────────── */
+.login-cosmos {
+  position: absolute; inset: 0; z-index: -2; overflow: hidden;
+  background: var(--bg-grad);
+}
+.login-aurora {
+  position: absolute; border-radius: 50%;
+  filter: blur(70px); opacity: 0.34; will-change: transform;
+}
+.login-aurora.a1 {
+  width: 62vmax; height: 62vmax; left: -20vmax; top: -24vmax;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, transparent) 0%, transparent 62%);
+  animation: loginAuroraA 26s var(--ease-app) infinite alternate;
+}
+.login-aurora.a2 {
+  width: 56vmax; height: 56vmax; right: -22vmax; top: -14vmax;
+  background: radial-gradient(circle, color-mix(in srgb, var(--other) 45%, transparent) 0%, transparent 62%);
+  animation: loginAuroraB 32s var(--ease-app) infinite alternate;
+}
+.login-aurora.a3 {
+  width: 52vmax; height: 52vmax; left: 14%; bottom: -28vmax;
+  background: radial-gradient(circle, color-mix(in srgb, var(--self) 34%, transparent) 0%, transparent 62%);
+  animation: loginAuroraC 30s var(--ease-app) infinite alternate;
+}
+.login-glow {
+  position: absolute; width: 40vmax; height: 40vmax; left: 30%; top: 20%;
+  border-radius: 50%; filter: blur(80px); opacity: 0.22; will-change: transform;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 50%, transparent) 0%, color-mix(in srgb, var(--other) 30%, transparent) 45%, transparent 70%);
+  animation: loginGlowDrift 40s var(--ease-app) infinite alternate;
+}
+.login-stars { position: absolute; inset: 0; width: 100%; height: 100%; }
+.login-star {
+  fill: #ffffff; opacity: 0.5;
+  animation-name: loginTwinkle; animation-timing-function: ease-in-out; animation-iteration-count: infinite;
+}
+
+@keyframes loginAuroraA { from { transform: translate(0, 0) scale(1); } to { transform: translate(4vmax, 3vmax) scale(1.08); } }
+@keyframes loginAuroraB { from { transform: translate(0, 0) scale(1); } to { transform: translate(-3vmax, 4vmax) scale(1.1); } }
+@keyframes loginAuroraC { from { transform: translate(0, 0) scale(1); } to { transform: translate(3vmax, -3vmax) scale(1.06); } }
+@keyframes loginGlowDrift { from { transform: translate(-6vmax, -4vmax) scale(1); } to { transform: translate(6vmax, 5vmax) scale(1.12); } }
+@keyframes loginTwinkle { 0%, 100% { opacity: 0.14; } 50% { opacity: 0.85; } }
+
+/* Login card: refined glass with a soft outer glow and a faint top sheen */
+.login-card {
+  border-radius: 24px;
+  box-shadow:
+    inset 0 1px 0 var(--glass-hi),
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 0 60px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.login-card::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(130% 80% at 50% 0%, rgba(255, 255, 255, 0.07), transparent 58%);
 }
