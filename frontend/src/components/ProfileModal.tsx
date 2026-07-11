@@ -55,15 +55,17 @@ export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: P
 
   const memberSince = useMemo(() => {
     const now = Date.now();
-    // Oldest expense in the user's groups — a server-backed first-activity signal
-    // that survives localStorage clears and works across devices.
+    const me = norm(StDB.getLocalId());
+    // Oldest expense THIS account paid — a server-backed, per-account first-activity signal
+    // (never another user's data) that survives localStorage clears and works across devices.
     let earliest = Infinity;
     for (const e of expenses) {
+      if (norm((e as any).payerId ?? (e as any).payer_id) !== me) continue;
       const ms = tsToMs((e as any).timestamp);
       if (ms != null && ms < earliest) earliest = ms;
     }
     let stored = NaN;
-    try { const iso = localStorage.getItem('simpli_member_since'); if (iso) stored = new Date(iso).getTime(); } catch {}
+    try { const iso = localStorage.getItem(StDB.accountKey('simpli_member_since')); if (iso) stored = new Date(iso).getTime(); } catch {}
     let sinceMs = Math.min(
       Number.isFinite(earliest) ? earliest : now,
       Number.isNaN(stored) ? now : stored,
@@ -80,10 +82,11 @@ export const ProfileModal = ({ open, onClose, profile, onLogout, tripsCount }: P
   // Heal the stored first-seen date so the streak never resets newer than real activity.
   useEffect(() => {
     try {
-      const iso = localStorage.getItem('simpli_member_since');
+      const k = StDB.accountKey('simpli_member_since');
+      const iso = localStorage.getItem(k);
       const stored = iso ? new Date(iso).getTime() : NaN;
       if (Number.isNaN(stored) || memberSince.sinceMs < stored) {
-        localStorage.setItem('simpli_member_since', new Date(memberSince.sinceMs).toISOString());
+        localStorage.setItem(k, new Date(memberSince.sinceMs).toISOString());
       }
     } catch {}
   }, [memberSince.sinceMs]);

@@ -18,6 +18,65 @@ export const getLocalId = () => {
 };
 export let subscriptionApplied = false;
 
+// ── Per-account identity isolation ───────────────────────────────────────────
+// SpacetimeDB hands out a device-bound anonymous identity persisted as a token. Without
+// scoping, a second Google account on the same browser reuses the first account's identity
+// (and therefore its galaxies). We persist one token PER Google account and bind the live
+// connection to the signed-in account, so each email gets its own isolated cosmos.
+const LEGACY_TOKEN_KEY = 'spacetimedb_token'; // token the current connection was built with
+const ACTIVE_SUB_KEY = 'simpli_active_sub';   // Google sub the current connection belongs to
+const tokenKeyForSub = (sub: string) => `simpli_token_${sub}`;
+
+const readProfileSub = (): string | null => {
+  try { const p = JSON.parse(localStorage.getItem('simpli_user') || 'null'); return p && p.sub ? String(p.sub) : null; }
+  catch { return null; }
+};
+
+/** The Google sub of the signed-in account, or null when logged out. */
+export const currentSub = readProfileSub;
+
+/** Namespace a localStorage key to the signed-in account so state never leaks across emails. */
+export const accountKey = (base: string): string => {
+  const s = readProfileSub();
+  return s ? `${base}::${s}` : base;
+};
+
+/**
+ * Bind the app to a Google account's own SpacetimeDB identity before we use the connection.
+ * Returns true if it triggered a reload to swap identity (caller must stop). A brand-new
+ * account gets a fresh identity (blank cosmos); a returning account restores its own.
+ */
+export const ensureAccount = (sub: string): boolean => {
+  const active = localStorage.getItem(ACTIVE_SUB_KEY);
+  if (active === sub) return false;                        // already this account
+
+  if (!active) {
+    // First account to claim this browser — adopt the current (fresh) identity as its own.
+    localStorage.setItem(ACTIVE_SUB_KEY, sub);
+    const cur = localStorage.getItem(LEGACY_TOKEN_KEY);
+    if (cur) localStorage.setItem(tokenKeyForSub(sub), cur);
+    return false;
+  }
+
+  // Switching to a DIFFERENT account: never reuse the previous account's identity.
+  localStorage.setItem(ACTIVE_SUB_KEY, sub);
+  const saved = localStorage.getItem(tokenKeyForSub(sub));
+  if (saved) localStorage.setItem(LEGACY_TOKEN_KEY, saved); // returning account → its identity
+  else localStorage.removeItem(LEGACY_TOKEN_KEY);           // new account → fresh identity
+  window.location.reload();
+  return true;
+};
+
+// One-time back-compat: bind an already-signed-in account (from before this change) to the
+// existing device identity, so returning users keep — and can restore — their galaxies.
+const seedActiveAccount = () => {
+  const sub = readProfileSub();
+  if (!sub) return;
+  if (!localStorage.getItem(ACTIVE_SUB_KEY)) localStorage.setItem(ACTIVE_SUB_KEY, sub);
+  const legacy = localStorage.getItem(LEGACY_TOKEN_KEY);
+  if (legacy && !localStorage.getItem(tokenKeyForSub(sub))) localStorage.setItem(tokenKeyForSub(sub), legacy);
+};
+
 // ── Event bus ──────────────────────────────────────────────────────────────────
 type Cb = () => void;
 type ErrCb = (err: Error) => void;
@@ -66,14 +125,20 @@ const setupSubscription = (c: DbConnection) => {
 export const initSpacetimeDB = () => {
   if (conn) return conn;
 
+  seedActiveAccount();
+
   conn = DbConnection.builder()
     .withUri(SPACETIMEDB_URI)
     .withDatabaseName(DATABASE_NAME)
-    .withToken(localStorage.getItem("spacetimedb_token") || "")
+    .withToken(localStorage.getItem(LEGACY_TOKEN_KEY) || "")
     .onConnect((_connection, identity, token) => {
       localIdentity = identity.toHexString().toLowerCase();
       console.log("✅ Connected to SpacetimeDB:", DATABASE_NAME, "Identity:", localIdentity);
-      if (token) localStorage.setItem("spacetimedb_token", token);
+      if (token) {
+        localStorage.setItem(LEGACY_TOKEN_KEY, token);
+        const sub = localStorage.getItem(ACTIVE_SUB_KEY);
+        if (sub) localStorage.setItem(tokenKeyForSub(sub), token);
+      }
       fire(connectCbs);
       fire(identityReadyCbs);
       setupSubscription(_connection);

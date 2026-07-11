@@ -1556,11 +1556,11 @@ function App() {
   const isConnected = useIsConnected();
   const trips = useTrip();
   const [cachedTrips] = useState<Trip[]>(() => {
-    try { const raw = localStorage.getItem('simpli_trips_cache'); return raw ? JSON.parse(raw) : []; } catch { return []; }
+    try { const raw = localStorage.getItem(StDB.accountKey('simpli_trips_cache')); return raw ? JSON.parse(raw) : []; } catch { return []; }
   });
   useEffect(() => {
     if (subReady) {
-      try { localStorage.setItem('simpli_trips_cache', JSON.stringify(trips.map(t => ({ id: t.id, name: t.name })))); } catch {}
+      try { localStorage.setItem(StDB.accountKey('simpli_trips_cache'), JSON.stringify(trips.map(t => ({ id: t.id, name: t.name })))); } catch {}
     }
   }, [subReady, trips]);
   const displayTrips = (subReady ? trips : (cachedTrips.length ? cachedTrips : trips)) as Trip[];
@@ -1569,7 +1569,7 @@ function App() {
   // Latches once shown (the early return) so a late trip sync can't yank it mid-flow.
   useEffect(() => {
     if (showOnboarding) return;
-    if (arrivedViaInvite || localStorage.getItem('simpli_onboarded')) return;
+    if (arrivedViaInvite || localStorage.getItem(StDB.accountKey('simpli_onboarded'))) return;
     if (profile && subReady && trips.length === 0) setShowOnboarding(true);
   }, [profile, subReady, trips.length, arrivedViaInvite, showOnboarding]);
 
@@ -1669,6 +1669,9 @@ function App() {
 
   const handleLogin = (p: GoogleProfile) => {
     localStorage.setItem('simpli_user', JSON.stringify(p));
+    // Bind to this account's own SpacetimeDB identity. A different email on this browser
+    // reloads into a fresh identity (blank cosmos) instead of inheriting the old galaxies.
+    if (StDB.ensureAccount(p.sub)) return;
     setProfile(p);
     const c = StDB.conn as any;
     if (c) { 
@@ -1695,7 +1698,7 @@ function App() {
 
   useEffect(() => {
     if (profile) {
-      try { if (!localStorage.getItem('simpli_member_since')) localStorage.setItem('simpli_member_since', new Date().toISOString()); } catch {}
+      try { const k = StDB.accountKey('simpli_member_since'); if (!localStorage.getItem(k)) localStorage.setItem(k, new Date().toISOString()); } catch {}
     }
   }, [profile]);
 
@@ -1779,7 +1782,7 @@ function App() {
             key="onboarding"
             firstName={profile.name.split(' ')[0]}
             onDone={() => {
-              try { localStorage.setItem('simpli_onboarded', '1'); } catch {}
+              try { localStorage.setItem(StDB.accountKey('simpli_onboarded'), '1'); } catch {}
               setShowOnboarding(false);
               setCoachCreate(true);
             }}
