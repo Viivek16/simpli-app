@@ -22,6 +22,7 @@ import { LeaderboardSidebar } from './components/LeaderboardSidebar';
 import { ProfileModal } from './components/ProfileModal';
 import { Onboarding } from './components/Onboarding';
 import { SettleModal } from './components/SettleModal';
+import { InviteSheet } from './components/InviteSheet';
 import { NotificationsManager } from './components/NotificationsManager';
 import { selfDeletedTrips } from './notifications';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -252,6 +253,7 @@ const TripRoom = ({
   const [showDeleteTrip, setShowDeleteTrip] = useState(false);
   const [deleteExpenseLoading, setDeleteExpenseLoading] = useState<string | null>(null);
   const [mobileLedgerOpen, setMobileLedgerOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const isMobile = useIsMobile();
   // On mobile, the Invite / Add-expense actions step aside while the ledger sheet is open.
   const actionsHidden = isMobile && mobileLedgerOpen;
@@ -259,10 +261,10 @@ const TripRoom = ({
   const starPopupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (mobileLedgerOpen) document.body.classList.add('bottom-sheet-open');
+    if (mobileLedgerOpen || inviteOpen) document.body.classList.add('bottom-sheet-open');
     else document.body.classList.remove('bottom-sheet-open');
     return () => document.body.classList.remove('bottom-sheet-open');
-  }, [mobileLedgerOpen]);
+  }, [mobileLedgerOpen, inviteOpen]);
 
   // Dismiss the star popup when clicking/tapping anywhere outside it (cosmos or free space).
   useEffect(() => {
@@ -295,14 +297,6 @@ const TripRoom = ({
   const tripExpenses = expenses.filter(e => e.tripId === trip.id);
 
   const shareLink = `${window.location.origin}/t/${trip.id}`;
-  const [copied, setCopied] = useState(false);
-  const copyInvite = () => {
-    navigator.clipboard.writeText(shareLink).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      toast.info('Invite link copied!');
-    });
-  };
 
   // Detect if trip was deleted while viewing
   useEffect(() => {
@@ -319,8 +313,8 @@ const TripRoom = ({
 
   // Sync overlay status with App to pause background
   useEffect(() => {
-    onOverlayChange(showModal || showDeleteTrip || settlePayload !== null);
-  }, [showModal, showDeleteTrip, settlePayload, onOverlayChange]);
+    onOverlayChange(showModal || showDeleteTrip || settlePayload !== null || inviteOpen);
+  }, [showModal, showDeleteTrip, settlePayload, inviteOpen, onOverlayChange]);
 
   // Handle Escape / Backspace for back navigation
   useEffect(() => {
@@ -329,13 +323,13 @@ const TripRoom = ({
         const target = e.target as HTMLElement;
         const tag = target.tagName.toLowerCase();
         if (tag === 'input' || tag === 'textarea') return;
-        if (showModal || showDeleteTrip || settlePayload) return;
+        if (showModal || showDeleteTrip || settlePayload || inviteOpen) return;
         onBack();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onBack, showModal, showDeleteTrip, settlePayload]);
+  }, [onBack, showModal, showDeleteTrip, settlePayload, inviteOpen]);
 
   const handleDeleteExpense = async (expId: string, desc: string) => {
     if (deleteConfirm !== expId) {
@@ -694,7 +688,7 @@ const TripRoom = ({
         display: 'flex', alignItems: 'center', gap: '12px', zIndex: 20
       }}>
         {/* On mobile: compact icon-only Invite; on desktop: full labeled button */}
-        <button onClick={copyInvite} className="btn-secondary lift" style={{
+        <button onClick={() => { AudioService.playBlip(); setInviteOpen(true); }} className="btn-secondary lift" style={{
           padding: 0, height: isMobile ? '46px' : '48px', borderRadius: isMobile ? '14px' : '12px',
           width: isMobile ? '46px' : 'auto', minWidth: isMobile ? '46px' : '160px', flex: 'none',
           background: 'rgba(5,6,10,0.72)', border: '1px solid rgba(255,255,255,0.14)',
@@ -705,7 +699,7 @@ const TripRoom = ({
         }}
         aria-label="Invite" title="Invite">
            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--self)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
-           {!isMobile && (copied ? 'Copied' : 'Invite')}
+           {!isMobile && 'Invite'}
         </button>
 
         <button onClick={() => { AudioService.playBlip(); setEditPayload(null); setShowModal(true); }} className="btn-primary lift" style={{
@@ -1057,6 +1051,15 @@ const TripRoom = ({
         tripId={trip.id}
         userMap={userMap}
         localId={localId}
+      />
+
+      <InviteSheet
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        tripName={trip.name}
+        shareLink={shareLink}
+        inviterName={profile.name}
+        isMobile={isMobile}
       />
 
       {/* B3: DOM Popup for selected star */}
