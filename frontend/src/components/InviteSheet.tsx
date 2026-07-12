@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { motion, AnimatePresence, useReducedMotion, type PanInfo } from 'framer-motion';
 import { toast } from './Toast';
 import { AudioService } from '../audio';
+import { BrandMark } from './BrandMark';
 
 interface InviteSheetProps {
   open: boolean;
@@ -77,8 +78,8 @@ export const InviteSheet = ({ open, onClose, tripName, shareLink, inviterName, i
   // Build the message once. Always encodeURIComponent before any value enters a URL.
   const { title, body, fullText } = useMemo(() => {
     const firstName = inviterName.split(' ')[0].trim() || 'A friend';
-    const t = `Join ${tripName} on SIMPLI`;
-    const b = `${firstName} is inviting you to join "${tripName}" on SIMPLI. Split expenses in cosmos.`;
+    const t = `Join ${tripName} on SIMPLI - Split Expenses in Cosmos`;
+    const b = `${firstName} is inviting you to their trip to ${tripName} on SIMPLI - Split Expenses in Cosmos.`;
     return { title: t, body: b, fullText: `${b}\n\n${shareLink}` };
   }, [inviterName, tripName, shareLink]);
 
@@ -153,27 +154,26 @@ export const InviteSheet = ({ open, onClose, tripName, shareLink, inviterName, i
   };
 
   // Tile definitions in order. Copy stays open; every other deep link closes the sheet.
+  // color is the channel accent; the tile derives its icon well and hover glow from it.
   const tiles = useMemo(() => {
-    const list: {
-      key: string; label: string; icon: ReactElement; color: string; bg: string; onPress: () => void;
-    }[] = [
+    const list: { key: string; label: string; icon: ReactElement; color: string; onPress: () => void }[] = [
       {
-        key: 'whatsapp', label: 'WhatsApp', icon: ICONS.whatsapp, color: '#4FD07E', bg: 'rgba(79,208,126,0.12)',
+        key: 'whatsapp', label: 'WhatsApp', icon: ICONS.whatsapp, color: '#4FD07E',
         onPress: () => { AudioService.playBlip(); openUrl(`https://wa.me/?text=${encodeURIComponent(fullText)}`); onClose(); },
       },
       {
-        key: 'telegram', label: 'Telegram', icon: ICONS.telegram, color: 'var(--other)', bg: 'rgba(94,230,255,0.10)',
+        key: 'telegram', label: 'Telegram', icon: ICONS.telegram, color: '#5EE6FF',
         onPress: () => { AudioService.playBlip(); openUrl(`https://t.me/share/url?url=${encodeURIComponent(shareLink)}&text=${encodeURIComponent(body)}`); onClose(); },
       },
       {
-        key: 'email', label: 'Email', icon: ICONS.email, color: 'var(--self)', bg: 'rgba(255,183,77,0.12)',
+        key: 'email', label: 'Email', icon: ICONS.email, color: '#FFB74D',
         onPress: () => { AudioService.playBlip(); window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(fullText)}`; onClose(); },
       },
     ];
 
     if (isMobile) {
       list.push({
-        key: 'sms', label: 'Message', icon: ICONS.sms, color: '#9DB4FF', bg: 'rgba(157,180,255,0.11)',
+        key: 'sms', label: 'Message', icon: ICONS.sms, color: '#9DB4FF',
         onPress: () => {
           AudioService.playBlip();
           // iOS wants sms:&body=, everything else sms:?body=. Getting this wrong silently breaks it.
@@ -186,15 +186,11 @@ export const InviteSheet = ({ open, onClose, tripName, shareLink, inviterName, i
 
     list.push({
       key: 'copy', label: copied ? 'Copied' : 'Copy link', icon: copied ? ICONS.check : ICONS.copy,
-      color: copied ? 'var(--owed)' : '#C7CEDB', bg: copied ? 'rgba(111,226,155,0.14)' : 'rgba(255,255,255,0.08)',
-      onPress: handleCopy,
+      color: copied ? '#6FE29B' : '#C7CEDB', onPress: handleCopy,
     });
 
     if (canNativeShare) {
-      list.push({
-        key: 'more', label: 'More apps', icon: ICONS.more, color: 'var(--accent)', bg: 'rgba(167,139,250,0.13)',
-        onPress: handleNativeShare,
-      });
+      list.push({ key: 'more', label: 'More apps', icon: ICONS.more, color: '#A78BFA', onPress: handleNativeShare });
     }
 
     return list;
@@ -207,28 +203,31 @@ export const InviteSheet = ({ open, onClose, tripName, shareLink, inviterName, i
 
   const backdropStyle: React.CSSProperties = {
     position: 'fixed', inset: 0, zIndex: 430,
-    background: 'rgba(2,4,8,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+    background: 'rgba(2,4,8,0.62)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
     display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center',
     padding: isMobile ? 0 : 20, pointerEvents: 'all',
   };
 
+  // Shared premium glass. Position/size differs by form factor; overflow hidden clips the glow.
+  const panelBase: React.CSSProperties = {
+    position: 'relative', overflow: 'hidden',
+    backdropFilter: 'blur(30px) saturate(1.35)', WebkitBackdropFilter: 'blur(30px) saturate(1.35)',
+    display: 'flex', flexDirection: 'column',
+  };
   const panelStyle: React.CSSProperties = isMobile
     ? {
-        width: '100%', maxWidth: 520,
-        background: 'rgba(8,10,16,0.92)', borderTop: '1px solid var(--glass-brd)',
-        borderRadius: '24px 24px 0 0',
-        backdropFilter: 'blur(30px) saturate(1.3)', WebkitBackdropFilter: 'blur(30px) saturate(1.3)',
-        boxShadow: '0 -14px 44px rgba(0,0,0,0.55), inset 0 1px 0 var(--glass-hi)',
-        padding: '8px 18px calc(22px + env(safe-area-inset-bottom))',
-        display: 'flex', flexDirection: 'column', gap: 16,
+        ...panelBase, width: '100%', maxWidth: 540,
+        background: 'linear-gradient(180deg, rgba(16,19,28,0.94), rgba(8,10,16,0.94))',
+        borderTop: '1px solid var(--glass-hi)', borderRadius: '26px 26px 0 0',
+        boxShadow: '0 -20px 60px rgba(0,0,0,0.6), inset 0 1px 0 var(--glass-hi)',
+        padding: '10px 20px calc(24px + env(safe-area-inset-bottom))', gap: 18,
       }
     : {
-        width: '100%', maxWidth: 400, borderRadius: 18,
-        background: 'rgba(5,6,10,0.94)', border: '1px solid var(--glass-brd)',
-        boxShadow: '0 24px 70px rgba(0,0,0,0.6)',
-        backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-        padding: '24px 22px 20px',
-        display: 'flex', flexDirection: 'column', gap: 18,
+        ...panelBase, width: '100%', maxWidth: 428, borderRadius: 24,
+        background: 'linear-gradient(180deg, rgba(16,19,28,0.96), rgba(7,9,14,0.97))',
+        border: '1px solid var(--glass-hi)',
+        boxShadow: '0 34px 90px rgba(0,0,0,0.66), inset 0 1px 0 var(--glass-hi)',
+        padding: '26px 24px 22px', gap: 20,
       };
 
   // Reduced motion: a plain fade, no spring, no translate. Otherwise mobile springs up from
@@ -238,11 +237,11 @@ export const InviteSheet = ({ open, onClose, tripName, shareLink, inviterName, i
     : isMobile
       ? {
           initial: { y: '100%' }, animate: { y: 0 }, exit: { y: '100%' },
-          transition: { type: 'spring' as const, damping: 34, stiffness: 340 },
+          transition: { type: 'spring' as const, damping: 36, stiffness: 360 },
         }
       : {
-          initial: { opacity: 0, scale: 0.96, y: 12 }, animate: { opacity: 1, scale: 1, y: 0 }, exit: { opacity: 0, scale: 0.97, y: 8 },
-          transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const },
+          initial: { opacity: 0, scale: 0.965, y: 14 }, animate: { opacity: 1, scale: 1, y: 0 }, exit: { opacity: 0, scale: 0.975, y: 10 },
+          transition: { duration: 0.34, ease: [0.22, 1, 0.36, 1] as const },
         };
 
   return (
@@ -269,32 +268,23 @@ export const InviteSheet = ({ open, onClose, tripName, shareLink, inviterName, i
               : {})}
             style={{ ...panelStyle, outline: 'none' }}
           >
+            {/* Warm cosmos glow bleeding down from the top edge. */}
+            <div className="invite-sheet-glow" aria-hidden="true" />
+
             {isMobile && (
-              <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 2, cursor: 'grab', touchAction: 'none' }}>
-                <div style={{ width: 44, height: 5, borderRadius: 4, background: 'rgba(255,255,255,0.28)' }} />
-              </div>
+              <div className="invite-sheet-handle" aria-hidden="true"><span /></div>
             )}
 
-            {/* Header */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, paddingRight: isMobile ? 0 : 28, position: 'relative' }}>
-              <div className="font-clash" style={{ fontSize: '1.18rem', fontWeight: 700, color: 'var(--text)', lineHeight: 1.2 }}>
-                Invite to {tripName}
+            {/* Header: brand chip, title + subline, close. */}
+            <div className="invite-sheet-head">
+              <span className="invite-sheet-brand" aria-hidden="true"><BrandMark size={26} /></span>
+              <div className="invite-sheet-titles">
+                <div className="font-clash invite-sheet-title">Invite to {tripName}</div>
+                <div className="invite-sheet-sub">Anyone with this link can join this galaxy.</div>
               </div>
-              <div style={{ fontSize: '0.82rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
-                Anyone with this link can join this galaxy.
-              </div>
-              {!isMobile && (
-                <button
-                  onClick={onClose}
-                  aria-label="Close invite"
-                  style={{
-                    position: 'absolute', top: -4, right: -6, width: 30, height: 30,
-                    background: 'transparent', border: 'none', color: 'var(--text-dim)',
-                    cursor: 'pointer', fontSize: '1.4rem', lineHeight: 1, display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                  }}
-                >&times;</button>
-              )}
+              <button className="invite-sheet-close" onClick={onClose} aria-label="Close invite">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6 18 18M18 6 6 18" /></svg>
+              </button>
             </div>
 
             {/* Channel tiles */}
@@ -304,29 +294,35 @@ export const InviteSheet = ({ open, onClose, tripName, shareLink, inviterName, i
                   key={tile.key}
                   type="button"
                   className="invite-tile"
+                  style={{ ['--tint' as string]: tile.color } as React.CSSProperties}
                   onClick={tile.onPress}
                   aria-label={tile.key === 'copy' ? 'Copy invite link' : tile.key === 'more' ? 'More sharing apps' : `Share via ${tile.label}`}
-                  initial={reduce ? false : { opacity: 0, y: 8 }}
+                  initial={reduce ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={reduce ? { duration: 0 } : { duration: 0.28, ease: [0.22, 1, 0.36, 1], delay: 0.04 + i * 0.02 }}
+                  transition={reduce ? { duration: 0 } : { duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: 0.06 + i * 0.03 }}
                 >
-                  <span className="invite-tile-icon" style={{ background: tile.bg, color: tile.color }}>
+                  <span className="invite-tile-icon">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       {tile.icon}
                     </svg>
                   </span>
-                  <span>{tile.label}</span>
+                  <span className="invite-tile-label">{tile.label}</span>
                 </motion.button>
               ))}
             </div>
 
-            {/* Low-emphasis, selectable link row. Doubles as the manual-copy fallback. */}
-            <div className="invite-sheet-link" title={shareLink}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            {/* Selectable link capsule with an inline copy affordance. */}
+            <div className="invite-sheet-link">
+              <svg className="invite-sheet-link-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" />
                 <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
               </svg>
-              <span>{shareLink.replace(/^https?:\/\//, '')}</span>
+              <span className="invite-sheet-link-url" title={shareLink}>{shareLink.replace(/^https?:\/\//, '')}</span>
+              <button className="invite-sheet-link-btn" onClick={handleCopy} aria-label="Copy link" data-copied={copied ? 'true' : undefined}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  {copied ? ICONS.check : ICONS.copy}
+                </svg>
+              </button>
             </div>
           </motion.div>
         </motion.div>

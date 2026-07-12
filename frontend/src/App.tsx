@@ -1493,7 +1493,7 @@ const LoginView = ({ onLogin }: { onLogin: (p: GoogleProfile) => void }) => {
 
         {/* Tagline */}
         <motion.p {...rise(0.27)} style={{ margin: '-6px 0 0', color: 'var(--text-dim)', fontSize: '0.95rem', fontWeight: 500, textAlign: 'center', lineHeight: 1.45 }}>
-          Split expenses in cosmos
+          Split Expenses in Cosmos
         </motion.p>
 
         {/* Google auth: official component, sized to the card so it reads as designed */}

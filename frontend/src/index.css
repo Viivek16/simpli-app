@@ -121,7 +121,7 @@ button:focus-visible, input:focus-visible {
 /* Respect reduced-motion: kill the ambient/looping animations, keep instant hovers */
 @media (prefers-reduced-motion: reduce) {
   .trophy-btn, .leader-row { animation: none !important; }
-  .trophy-btn:hover, .profile-avatar:hover, .leader-row:hover, .lift:hover, .invite-tile:hover { transform: none; }
+  .trophy-btn:hover, .profile-avatar:hover, .leader-row:hover, .lift:hover, .invite-tile:hover, .invite-tile:hover .invite-tile-icon { transform: none; }
   /* Login: freeze aurora drift, glow, and twinkle; show the final composed state */
   .login-aurora, .login-glow, .login-star { animation: none !important; }
   /* Onboarding: freeze the create-field coach pulse (framer motifs handle their own) */
@@ -546,71 +546,107 @@ button:focus-visible, input:focus-visible {
 @keyframes coachPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   Invite share sheet: channel tiles, grid, and the selectable link row.
-   Namespaced with invite-* so nothing collides. Reduced motion is handled in the
-   block above (.invite-tile:hover) and by framer inside the component.
+   Invite share sheet: a premium share card. Brand chip, tinted channel wells,
+   and a copy capsule, all on the app's glass + amber system. Each tile derives
+   its icon well and hover glow from a per-tile --tint. Namespaced invite-*.
    ─────────────────────────────────────────────────────────────────────────── */
-.invite-sheet-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  width: 100%;
+
+/* Warm cosmos glow bleeding from the top edge (sits behind the content). */
+.invite-sheet-glow {
+  position: absolute; top: -48%; left: 50%; transform: translateX(-50%);
+  width: 120%; height: 66%; z-index: 0; pointer-events: none;
+  background: radial-gradient(58% 58% at 50% 50%, rgba(255,183,77,0.17) 0%, rgba(167,139,250,0.09) 44%, transparent 72%);
+  filter: blur(28px);
 }
-@media (max-width: 768px) {
-  .invite-sheet-grid { grid-template-columns: repeat(3, 1fr); }
+.invite-sheet-handle, .invite-sheet-head, .invite-sheet-grid, .invite-sheet-link {
+  position: relative; z-index: 1;
 }
+
+.invite-sheet-handle { display: flex; justify-content: center; padding-bottom: 4px; cursor: grab; touch-action: none; }
+.invite-sheet-handle span { width: 44px; height: 5px; border-radius: 4px; background: rgba(255,255,255,0.26); }
+
+.invite-sheet-head { display: flex; align-items: center; gap: 13px; }
+.invite-sheet-brand {
+  flex-shrink: 0; width: 44px; height: 44px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(120% 120% at 30% 20%, rgba(255,183,77,0.20), rgba(255,183,77,0.05));
+  border: 1px solid color-mix(in srgb, var(--self) 30%, var(--glass-brd));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 8px 20px -8px rgba(255,183,77,0.45);
+}
+.invite-sheet-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.invite-sheet-title {
+  font-size: 1.24rem; font-weight: 700; color: var(--text); line-height: 1.15; letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.invite-sheet-sub { font-size: 0.8rem; color: var(--text-dim); line-height: 1.35; }
+.invite-sheet-close {
+  flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--glass-brd); color: var(--text-dim);
+  transition: background var(--dur-micro) var(--ease-app), color var(--dur-micro) var(--ease-app), transform var(--dur-micro) var(--ease-app);
+}
+@media (hover: hover) { .invite-sheet-close:hover { background: rgba(255,255,255,0.1); color: var(--text); } }
+.invite-sheet-close:active { transform: scale(0.92); }
+
+.invite-sheet-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; width: 100%; }
+@media (max-width: 768px) { .invite-sheet-grid { grid-template-columns: repeat(3, 1fr); gap: 11px; } }
+
 .invite-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 9px;
-  min-height: 84px;
-  padding: 13px 6px 11px;
-  border-radius: 16px;
-  cursor: pointer;
-  background: rgba(255,255,255,0.04);
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  min-height: 92px; padding: 15px 6px 12px; border-radius: 18px; cursor: pointer;
+  background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.02));
   border: 1px solid var(--glass-brd);
   box-shadow: inset 0 1px 0 var(--glass-hi);
   color: var(--text-dim);
-  font-family: 'Satoshi', sans-serif;
-  font-weight: 600;
-  font-size: 0.72rem;
-  text-align: center;
-  transition: transform var(--dur-micro) var(--ease-app), background var(--dur-micro) var(--ease-app), border-color var(--dur-micro) var(--ease-app);
+  font-family: 'Satoshi', sans-serif; font-weight: 600; font-size: 0.74rem; text-align: center;
+  transition: transform var(--dur-micro) var(--ease-app), background var(--dur-micro) var(--ease-app),
+              border-color var(--dur-micro) var(--ease-app), box-shadow var(--dur-micro) var(--ease-app), color var(--dur-micro) var(--ease-app);
 }
+.invite-tile-icon {
+  width: 48px; height: 48px; border-radius: 15px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--tint);
+  background:
+    radial-gradient(130% 130% at 30% 22%, color-mix(in srgb, var(--tint) 32%, transparent) 0%, color-mix(in srgb, var(--tint) 9%, transparent) 62%, transparent 100%),
+    rgba(255,255,255,0.03);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), inset 0 0 0 1px color-mix(in srgb, var(--tint) 16%, transparent);
+  transition: transform var(--dur-element) var(--ease-app), box-shadow var(--dur-element) var(--ease-app);
+}
+.invite-tile-label { transition: color var(--dur-micro) var(--ease-app); }
 @media (hover: hover) {
   .invite-tile:hover {
-    transform: translateY(-2px);
-    background: rgba(255,255,255,0.075);
-    border-color: var(--glass-hi);
+    transform: translateY(-3px);
+    background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.035));
+    border-color: color-mix(in srgb, var(--tint) 44%, var(--glass-brd));
+    box-shadow: inset 0 1px 0 var(--glass-hi), 0 12px 26px rgba(0,0,0,0.4), 0 0 24px -7px color-mix(in srgb, var(--tint) 65%, transparent);
+    color: var(--text);
+  }
+  .invite-tile:hover .invite-tile-icon {
+    transform: translateY(-1px) scale(1.05);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), inset 0 0 0 1px color-mix(in srgb, var(--tint) 30%, transparent), 0 8px 20px -4px color-mix(in srgb, var(--tint) 48%, transparent);
   }
 }
 .invite-tile:active { transform: translateY(0) scale(0.96); }
-.invite-tile-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
+
 .invite-sheet-link {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 14px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--glass-brd);
-  color: var(--text-dim);
-  font-size: 0.8rem;
-  user-select: all;
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 10px 10px 14px; border-radius: 14px;
+  background: rgba(255,255,255,0.045); border: 1px solid var(--glass-brd);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+  color: var(--text-dim); font-size: 0.82rem;
 }
-.invite-sheet-link span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  user-select: all;
+.invite-sheet-link-ico { color: var(--self); opacity: 0.85; flex-shrink: 0; }
+.invite-sheet-link-url {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  user-select: all; font-family: 'Satoshi', sans-serif; color: var(--text);
 }
+.invite-sheet-link-btn {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,183,77,0.12); border: 1px solid rgba(255,183,77,0.28); color: var(--self);
+  transition: background var(--dur-micro) var(--ease-app), transform var(--dur-micro) var(--ease-app),
+              color var(--dur-micro) var(--ease-app), border-color var(--dur-micro) var(--ease-app);
+}
+@media (hover: hover) { .invite-sheet-link-btn:hover { background: rgba(255,183,77,0.2); transform: translateY(-1px); } }
+.invite-sheet-link-btn:active { transform: scale(0.92); }
+.invite-sheet-link-btn[data-copied='true'] { background: rgba(111,226,155,0.16); border-color: rgba(111,226,155,0.4); color: var(--owed); }
