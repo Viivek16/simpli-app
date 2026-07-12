@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="sAmber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFC46B"/><stop offset="100%" stop-color="#E8963A"/>
+    </linearGradient>
+    <radialGradient id="sPlanet" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#B9F7D2"/><stop offset="100%" stop-color="#6FE29B"/>
+    </radialGradient>
+  </defs>
+  <g transform="translate(-2 7)">
+    <g transform="rotate(-26 50 43)">
+      <path d="M 10 43 A 40 12.5 0 0 1 90 43" fill="none" stroke="#F4F6FB" stroke-opacity="0.22" stroke-width="2.6"/>
+    </g>
+    <path d="M 64 27 C 64 17 37 17 37 30 C 37 43 63 43 63 56 C 63 69 36 69 36 59" fill="none" stroke="url(#sAmber)" stroke-width="8" stroke-linecap="round"/>
+    <g transform="rotate(-26 50 43)">
+      <path d="M 10 43 A 40 12.5 0 0 0 90 43" fill="none" stroke="#F4F6FB" stroke-opacity="0.85" stroke-width="2.6"/>
+      <circle cx="82.8" cy="50.2" r="7" fill="#6FE29B" opacity="0.25"/>
+      <circle cx="82.8" cy="50.2" r="4.6" fill="url(#sPlanet)"/>
+    </g>
+  </g>
+</svg>

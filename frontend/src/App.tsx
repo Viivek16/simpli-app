@@ -23,6 +23,7 @@ import { ProfileModal } from './components/ProfileModal';
 import { Onboarding } from './components/Onboarding';
 import { SettleModal } from './components/SettleModal';
 import { InviteSheet } from './components/InviteSheet';
+import { BrandMark } from './components/BrandMark';
 import { NotificationsManager } from './components/NotificationsManager';
 import { selfDeletedTrips } from './notifications';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -546,10 +547,7 @@ const TripRoom = ({
               aria-label={`Back to cosmos, currently in ${trip.name}`}
               style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, padding: '4px 4px', justifyContent: 'flex-start' }}
             >
-              <svg width="22" height="21" viewBox="0 0 48 46" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
-                <defs><linearGradient id="simpliBoltRoom" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
-                <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltRoom)" />
-              </svg>
+              <BrandMark size={22} />
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
               <span className="font-clash" style={{ fontWeight: 700, fontSize: '1.12rem', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '0.01em' }}>{trip.name}</span>
             </button>
@@ -582,10 +580,7 @@ const TripRoom = ({
             <div onClick={onBack} title="Back to cosmos" style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', transition: 'opacity 0.2s' }}
               onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
               onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}>
-              <svg width="26" height="25" viewBox="0 0 48 46" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
-                <defs><linearGradient id="simpliBoltRoom" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
-                <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltRoom)" />
-              </svg>
+              <BrandMark size={26} />
               <SimpliWordmark />
             </div>
 
@@ -1284,10 +1279,7 @@ const Dashboard = ({
         display: 'flex', alignItems: 'center', gap: '24px', padding: '20px 28px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <svg width="26" height="25" viewBox="0 0 48 46" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
-            <defs><linearGradient id="simpliBoltHome" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
-            <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltHome)" />
-          </svg>
+          <BrandMark size={26} />
           <SimpliWordmark />
         </div>
         <div style={{ flex: 1 }} />
@@ -1493,18 +1485,15 @@ const LoginView = ({ onLogin }: { onLogin: (p: GoogleProfile) => void }) => {
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '22px',
         }}
       >
-        {/* Wordmark: gradient bolt above SIMPLI, matching the in-app headers */}
+        {/* Wordmark: brand mark above SIMPLI, matching the in-app headers */}
         <motion.div {...rise(0.18)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-          <svg width="42" height="40" viewBox="0 0 48 46" fill="none" aria-hidden="true">
-            <defs><linearGradient id="simpliBoltLogin" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#FFC46B" /><stop offset="100%" stopColor="#E8963A" /></linearGradient></defs>
-            <path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" fill="url(#simpliBoltLogin)" />
-          </svg>
+          <BrandMark size={44} />
           <h1 className="font-clash" style={{ margin: 0, fontSize: 'clamp(1.9rem, 7vw, 2.15rem)', fontWeight: 700, letterSpacing: '0.16em', paddingLeft: '0.16em', color: 'var(--text)' }}>SIMPLI</h1>
         </motion.div>
 
         {/* Tagline */}
         <motion.p {...rise(0.27)} style={{ margin: '-6px 0 0', color: 'var(--text-dim)', fontSize: '0.95rem', fontWeight: 500, textAlign: 'center', lineHeight: 1.45 }}>
-          Split expenses in a living cosmos.
+          Split expenses in cosmos
         </motion.p>
 
         {/* Google auth: official component, sized to the card so it reads as designed */}

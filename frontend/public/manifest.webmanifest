@@ -1,7 +1,7 @@
 {
   "name": "SIMPLI",
   "short_name": "SIMPLI",
-  "description": "Split expenses in a living cosmos. Every group is a galaxy, every friend is a star.",
+  "description": "Split expenses in cosmos. Every group is a galaxy, every friend is a star.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

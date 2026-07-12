@@ -78,7 +78,7 @@ export const InviteSheet = ({ open, onClose, tripName, shareLink, inviterName, i
   const { title, body, fullText } = useMemo(() => {
     const firstName = inviterName.split(' ')[0].trim() || 'A friend';
     const t = `Join ${tripName} on SIMPLI`;
-    const b = `${firstName} is inviting you to join "${tripName}" on SIMPLI. Split expenses in a living cosmos.`;
+    const b = `${firstName} is inviting you to join "${tripName}" on SIMPLI. Split expenses in cosmos.`;
     return { title: t, body: b, fullText: `${b}\n\n${shareLink}` };
   }, [inviterName, tripName, shareLink]);
 
