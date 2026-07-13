@@ -6,7 +6,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef, Suspense, laz
 import { GoogleLogin, googleLogout } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { motion, AnimatePresence, useMotionValue, animate, useReducedMotion } from 'framer-motion';
-import { initSpacetimeDB, onSpacetimeConnect, onSpacetimeDisconnect, onSubscriptionApplied } from './spacetimedb';
+import { onSpacetimeConnect, onSpacetimeDisconnect, onSubscriptionApplied } from './spacetimedb';
 import * as StDB from './spacetimedb';
 import { useExpense, useExpenseSplit, useUser } from './module_bindings/hooks';
 import type { Expense, ExpenseSplit } from './module_bindings/types';
@@ -1606,9 +1606,10 @@ function App() {
     return () => window.removeEventListener('popstate', handler);
   }, []);
 
-  // Init SpacetimeDB once; subscription wired inside spacetimedb.ts onConnect
+  // Connection is opened at module load (main.tsx). Mirror the live subscription flag into
+  // React state — the guard covers the case where data already applied before this mounted.
   useEffect(() => {
-    initSpacetimeDB();
+    if (StDB.subscriptionApplied) setSubReady(true);
     const u = onSubscriptionApplied(() => setSubReady(true));
     return () => { u(); };
   }, []);

@@ -132,12 +132,6 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
     return max || 1;
   }, [netDebts]);
 
-  const maxPairDebt = useMemo(() => {
-    let max = 0;
-    Object.values(owes).forEach(p => Object.values(p).forEach(v => { max = Math.max(max, v); }));
-    return max || 1;
-  }, [owes]);
-
   // Spherical Fibonacci node layout
   const nodes = useMemo(() => {
     const n = Math.max(members.length, 1);
@@ -386,7 +380,8 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
           const amount = Math.max(ab, ba);
           if (amount < 0.5) return null;
 
-          const ratio = amount / maxPairDebt;
+          // Uniform sleek line for every debt connection — weight/opacity no longer scale
+          // with the amount (that reads poorly on the constellation).
           const dir = new THREE.Vector3().subVectors(b.position, a.position).normalize();
           const start = new THREE.Vector3().copy(a.position).addScaledVector(dir, 0.55);
           const end = new THREE.Vector3().copy(b.position).addScaledVector(dir, -0.55);
@@ -396,11 +391,11 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
               key={`${a.id}-${b.id}`}
               points={[start, end]}
               color="#ffffff"
-              lineWidth={0.35 + ratio * 1.6}
+              lineWidth={1.1}
               transparent
-              opacity={0.18 + ratio * 0.4}
+              opacity={0.32}
               toneMapped={false}
-              userData={{ baseOpacity: 0.18 + ratio * 0.4 }}
+              userData={{ baseOpacity: 0.32 }}
             />
           );
         })
