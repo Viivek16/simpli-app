@@ -108,7 +108,8 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
 
   const canSubmit = (() => {
     if (!desc.trim() || !totalAmt || totalAmt <= 0) return false;
-    if (mode === 'equally' || mode === 'personal') return true;
+    if (mode === 'personal') return true;
+    if (mode === 'equally') return selectedArr.length > 0;
     if (mode === 'unequal') return Math.abs(remaining) < 0.005 && selectedArr.length > 0;
     return false;
   })();

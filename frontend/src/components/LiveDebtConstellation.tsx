@@ -154,8 +154,6 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
 
   const isSolo = members.length <= 1;
 
-  if (!activeTripId) return null;
-
   // Create radial gradient texture for the halos
   const haloTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
