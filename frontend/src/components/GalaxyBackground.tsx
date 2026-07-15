@@ -396,144 +396,7 @@ const BackgroundStarfield = ({ activeTripId }: { activeTripId: string | null }) 
   );
 };
 
-// ─── Shooting stars ───────────────────────────────────────────────────────────
-// Idle motion for the cosmos. With no pointer on it the field is handsome but inert,
-// so a meteor burns across every few seconds — just enough to pull the eye back and
-// hint that the background is alive and worth reaching into.
-//
-// Restraint is the whole design: two streaks in flight at most on desktop, one on a
-// phone, each alive for barely a second. They spawn relative to the live camera, so a
-// streak always crosses the frame wherever it is pointed (home, settled sector, or
-// inside a galaxy) instead of being flung somewhere off screen.
-//
-// A streak is one run of points laid along its own path. The material is additive,
-// where black already reads as fully transparent, so ramping the tail to black tapers
-// it away without a second material or any per-vertex alpha.
-const TRAIL = 18;   // points per streak — spaced tighter than their size, so they read as a line
-const M_DIST = 70;  // spawn depth ahead of the camera: out among the far stars, inside the fog band
 
-interface Meteor {
-  pos: THREE.Vector3; dir: THREE.Vector3;
-  speed: number; life: number; age: number; len: number;
-  wait: number; active: boolean;
-}
-
-const ShootingStars = () => {
-  const geomRef = useRef<THREE.BufferGeometry>(null);
-  const phone = useMemo(() => isPhoneNow(), []);
-  if (!sharedStarTex) sharedStarTex = createStarTexture();
-
-  // Each slot idles, runs (~1.2s), then idles again, so a slot's cycle is life + idle.
-  // Desktop runs two slots on a 3–4.6s idle → a ~5s cycle each → a streak every ~2.5s
-  // with the odd pair. A phone runs one slot on a 1.1–2s idle → the same ~2.7s cadence
-  // from a single slot, so it can never show two at once.
-  const meteors = useMemo<Meteor[]>(
-    () => Array.from({ length: phone ? 1 : 2 }, () => ({
-      pos: new THREE.Vector3(), dir: new THREE.Vector3(),
-      speed: 0, life: 0, age: 0, len: 0,
-      wait: THREE.MathUtils.randFloat(0.8, 3.2), // stagger the openers
-      active: false,
-    })),
-    [phone],
-  );
-
-  const { positions, colors } = useMemo(() => ({
-    positions: new Float32Array(meteors.length * TRAIL * 3),
-    colors: new Float32Array(meteors.length * TRAIL * 3),
-  }), [meteors.length]);
-
-  // Reused on every spawn — no per-frame allocation.
-  const basis = useMemo(() => ({ r: new THREE.Vector3(), u: new THREE.Vector3(), f: new THREE.Vector3() }), []);
-
-  const spawn = (m: Meteor, cam: THREE.PerspectiveCamera) => {
-    cam.matrixWorld.extractBasis(basis.r, basis.u, basis.f);
-    basis.f.negate();                                   // three's basis Z points back out of the screen
-    const halfH = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)) * M_DIST;
-    const halfW = halfH * cam.aspect;
-    const sx = THREE.MathUtils.randFloat(-0.9, 0.9);
-    // Enter just over the top edge, then fall across the frame leaning back toward the
-    // middle, so the run stays in view instead of clipping out the nearest corner.
-    m.pos.copy(cam.position)
-      .addScaledVector(basis.f, M_DIST)
-      .addScaledVector(basis.r, sx * halfW)
-      .addScaledVector(basis.u, THREE.MathUtils.randFloat(0.98, 1.2) * halfH);
-    m.dir.copy(basis.r)
-      .multiplyScalar((sx > 0 ? -1 : 1) * THREE.MathUtils.randFloat(0.4, 0.85))
-      .addScaledVector(basis.u, -1)
-      .normalize();
-    m.speed = THREE.MathUtils.randFloat(34, 50);
-    m.life = THREE.MathUtils.randFloat(1, 1.4);
-    m.len = THREE.MathUtils.randFloat(6, 9.5);
-    m.age = 0;
-    m.active = true;
-  };
-
-  useFrame(({ camera }, delta) => {
-    const geo = geomRef.current;
-    if (!geo) return;
-    const posAttr = geo.attributes.position as THREE.BufferAttribute;
-    const colAttr = geo.attributes.color as THREE.BufferAttribute;
-    const P = posAttr.array as Float32Array;
-    const C = colAttr.array as Float32Array;
-
-    for (let mi = 0; mi < meteors.length; mi++) {
-      const m = meteors[mi];
-      const base = mi * TRAIL * 3;
-      let lit = true;
-
-      if (!m.active) {
-        m.wait -= delta;
-        if (m.wait > 0) lit = false;
-        else spawn(m, camera as THREE.PerspectiveCamera);
-      }
-
-      if (lit) {
-        m.age += delta;
-        if (m.age >= m.life) {
-          m.active = false;
-          m.wait = phone ? THREE.MathUtils.randFloat(1.1, 2) : THREE.MathUtils.randFloat(3, 4.6);
-          lit = false;
-        }
-      }
-
-      if (!lit) { // idle: additive black is invisible, so the slot simply isn't there
-        for (let i = 0; i < TRAIL; i++) { const o = base + i * 3; C[o] = C[o + 1] = C[o + 2] = 0; }
-        continue;
-      }
-
-      m.pos.addScaledVector(m.dir, m.speed * delta);
-
-      // Strike in fast, burn out slow. Nothing ever pops on or off.
-      const t = m.age / m.life;
-      const env = Math.min(t / 0.1, 1) * Math.max(0, Math.min((1 - t) / 0.45, 1));
-
-      for (let i = 0; i < TRAIL; i++) {
-        const f = i / (TRAIL - 1);                          // 0 head → 1 tail tip
-        const o = base + i * 3;
-        P[o]     = m.pos.x - m.dir.x * m.len * f;
-        P[o + 1] = m.pos.y - m.dir.y * m.len * f;
-        P[o + 2] = m.pos.z - m.dir.z * m.len * f;
-        const b = Math.pow(1 - f, 2.2) * env * 0.82;        // head sits just over the bloom threshold
-        C[o] = b * 0.88; C[o + 1] = b * 0.94; C[o + 2] = b; // cool white, a touch blue
-      }
-    }
-    posAttr.needsUpdate = true;
-    colAttr.needsUpdate = true;
-  });
-
-  return (
-    <points frustumCulled={false}>
-      <bufferGeometry ref={geomRef}>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
-      </bufferGeometry>
-      <pointsMaterial
-        transparent vertexColors map={sharedStarTex} size={1} sizeAttenuation
-        depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false}
-      />
-    </points>
-  );
-};
 
 // ─── Camera Animator ────────────────────────────────────────────────────────
 const CameraAnimator = ({
@@ -593,10 +456,6 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
   const targetPos = useRef(framePose(ORIGIN, isPhoneNow()));
   const controlsRef = useRef<any>(null);
   const prevHomeView = useRef<HomeView>(homeView);
-  // Shooting stars are pure decoration — idle motion is the entire point of them — so a
-  // reduced-motion preference means not mounting them at all.
-  const idleMotion = useMemo(() => !prefersReducedMotion(), []);
-
   // Galaxy layout: active galaxies orbit the origin, settled ones orbit the distant
   // settled sector. One source of truth for both rendering and camera targeting.
   const layout = useMemo(() => {
@@ -665,7 +524,7 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
       <CameraAnimator targetPos={targetPos.current} settling={flying} duration={settleDuration} />
 
       <BackgroundStarfield activeTripId={activeTripId} />
-      {idleMotion && <ShootingStars />}
+
 
       <ErrorBoundary fallback={null}>
         {activeTripId && (
