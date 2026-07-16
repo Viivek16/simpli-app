@@ -1,5 +1,7 @@
-const CACHE = 'simpli-v3';
-const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png'];
+const CACHE = 'simpli-v4';
+// The notification art is precached: a push should render it the instant it lands,
+// and a fetch at display time is a race the notification can lose.
+const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/badge-96.png', '/notif-192.png'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
@@ -40,16 +42,28 @@ self.addEventListener('fetch', (e) => {
 });
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'SIMPLI', body: 'New activity in your trips', url: '/' };
+  let data = { title: 'SIMPLI', body: 'New activity in your galaxies', url: '/', tag: 'simpli' };
   try { if (event.data) data = { ...data, ...event.data.json() }; } catch {}
   event.waitUntil(
+    // The title is the galaxy name, not 'SIMPLI' — the shade already prints the app
+    // name above it, so a 'SIMPLI' title just says it twice.
     self.registration.showNotification(data.title || 'SIMPLI', {
       body: data.body || '',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      tag: 'simpli-activity',
+      // MUST stay monochrome-on-transparent. Android throws the colour away and uses
+      // the alpha as a stencil, tinting it to suit the user's light/dark theme — which
+      // is what makes it adapt for free. Pointing this at an opaque image (as it was)
+      // stencils a solid block.
+      badge: '/badge-96.png',
+      // Circular tile: Android 12+ circle-crops the large icon, and the shades that
+      // don't crop exposed the square app icon's raw edges.
+      icon: '/notif-192.png',
+      // Per-galaxy, so two groups stack as separate threads instead of silently
+      // overwriting each other, while repeat activity in one galaxy collapses.
+      tag: data.tag || 'simpli',
       renotify: true,
+      timestamp: Date.now(),
       data: { url: data.url || '/' },
+      actions: [{ action: 'open', title: 'View' }],
     })
   );
 });

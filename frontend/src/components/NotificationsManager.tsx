@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as StDB from '../spacetimedb';
-import { showAppNotification, requestNotificationPermission, notificationsSupported, selfDeletedTrips } from '../notifications';
+import { showAppNotification, requestNotificationPermission, notificationsSupported, selfDeletedTrips, tagForTrip } from '../notifications';
 import { enablePush } from '../push';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
@@ -10,6 +10,21 @@ const INR = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
 
 const BANNER_KEY = 'simpli_notif_decided';
+
+/**
+ * OS-notification shape for a galaxy event, mirroring what /api/notify pushes.
+ *
+ * When the app is open but backgrounded, this notifier AND the push both fire for the
+ * same event; the shared tag is what collapses them into one. `body` drops the galaxy
+ * name because the title carries it — the toast keeps it inline, since a toast has no
+ * title to put it in.
+ */
+const notifOpts = (tripId: string, tripName: string, body: string) => ({
+  title: tripName,
+  body,
+  tag: tagForTrip(tripId),
+  url: `/t/${tripId}`,
+});
 
 const eTrip = (r: any) => r.tripId ?? r.trip_id;
 const ePayer = (r: any) => norm(r.payerId ?? r.payer_id);
@@ -78,15 +93,18 @@ export const NotificationsManager = () => {
       if (seenMember.current.has(key)) return;
       seenMember.current.add(key);
       const me = norm(StDB.getLocalId());
+      const tName = tripNameOf(c, tripId);
       if (uid === me) {
         myTripIds.current.add(tripId);
         // Someone added me to an existing group (2+ members). Creating my own group (only me) stays silent.
         const memberCount = [...c.db.trip_member.iter()].filter((m: any) => mTrip(m) === tripId).length;
-        if (memberCount >= 2) showAppNotification(`You've been added to ${tripNameOf(c, tripId)}`);
+        if (memberCount >= 2) {
+          showAppNotification(`You've been added to ${tName}`, notifOpts(tripId, tName, `You've been added`));
+        }
         return;
       }
       if (!iAmMember(c, tripId)) return;
-      showAppNotification(`${first(nameOf(c, uid))} joined ${tripNameOf(c, tripId)}`);
+      showAppNotification(`${first(nameOf(c, uid))} joined ${tName}`, notifOpts(tripId, tName, `${first(nameOf(c, uid))} joined`));
     };
 
     const onExpenseInsert = (_ctx: any, row: any) => {
@@ -100,14 +118,16 @@ export const NotificationsManager = () => {
       if (payer === me) return;
       if (!iAmMember(c, tripId)) return;
       const tName = tripNameOf(c, tripId);
+      const o = (body: string) => notifOpts(tripId, tName, body);
       if ((row.description || '') === 'Debt settlement') {
         let other = '';
         for (const s of c.db.expense_split.iter()) { if (sExp(s) === row.id) { other = sDebtor(s); break; } }
-        if (other === me) showAppNotification(`${first(nameOf(c, payer))} settled ${INR(row.amount)} with you in ${tName}. All settled up.`);
-        else if (other) showAppNotification(`${first(nameOf(c, payer))} settled ${INR(row.amount)} with ${first(nameOf(c, other))} in ${tName}`);
-        else showAppNotification(`${first(nameOf(c, payer))} settled up in ${tName}`);
+        if (other === me) showAppNotification(`${first(nameOf(c, payer))} settled ${INR(row.amount)} with you in ${tName}. All settled up.`, o(`${first(nameOf(c, payer))} settled ${INR(row.amount)} with you. All settled up.`));
+        else if (other) showAppNotification(`${first(nameOf(c, payer))} settled ${INR(row.amount)} with ${first(nameOf(c, other))} in ${tName}`, o(`${first(nameOf(c, payer))} settled ${INR(row.amount)} with ${first(nameOf(c, other))}`));
+        else showAppNotification(`${first(nameOf(c, payer))} settled up in ${tName}`, o(`${first(nameOf(c, payer))} settled up`));
       } else {
-        showAppNotification(`${first(nameOf(c, payer))} added ${row.description || 'an expense'} \u00b7 ${INR(row.amount)}`);
+        const line = `${first(nameOf(c, payer))} added ${row.description || 'an expense'} \u00b7 ${INR(row.amount)}`;
+        showAppNotification(line, o(line));
       }
     };
 
@@ -125,7 +145,8 @@ export const NotificationsManager = () => {
         const stillExists = [...cc.db.trip.iter()].some((t: any) => t.id === tripId);
         if (!stillExists) return;
         if (!iAmMember(cc, tripId)) return;
-        showAppNotification(`${first(nameOf(cc, payer))} removed ${row.description || 'an expense'}`);
+        const line = `${first(nameOf(cc, payer))} removed ${row.description || 'an expense'}`;
+        showAppNotification(line, notifOpts(tripId, tripNameOf(cc, tripId), line));
       }, 180);
     };
 
@@ -140,7 +161,11 @@ export const NotificationsManager = () => {
       if (!readyRef.current) return;
       if (selfDeletedTrips.has(row.id)) { selfDeletedTrips.delete(row.id); return; }
       if (!wasMember) return;
-      showAppNotification(`${name} was removed`);
+      // Reuses the galaxy's tag so this supersedes any pending notification about it,
+      // but points home rather than at /t/<id> — there is nothing left to open.
+      showAppNotification(`${name} was removed`, {
+        title: name, body: 'This galaxy was removed', tag: tagForTrip(row.id), url: '/',
+      });
     };
 
     // Re-register on every (re)connect. A reconnect yields a new connection object,

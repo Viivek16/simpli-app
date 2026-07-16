@@ -139,7 +139,8 @@ export default async function handler(req: any, res: any) {
       const amount = Number(exp.amount) || 0;
       const desc = String(exp.description || '');
       actor = payer;
-      bodyFor = () => `${first(nameOf(payer))} added ${desc || 'an expense'} · ${INR(amount)} in ${tName}`;
+      // The galaxy name is the notification title, so it is deliberately not repeated here.
+      bodyFor = () => `${first(nameOf(payer))} added ${desc || 'an expense'} · ${INR(amount)}`;
 
     } else if (kind === 'settle') {
       const debtorId = String(body.debtorId || '');
@@ -163,10 +164,10 @@ export default async function handler(req: any, res: any) {
       actor = payer;
       bodyFor = (uid) =>
         uid === other
-          ? `${first(nameOf(payer))} settled ${INR(amount)} with you in ${tName}. All settled up.`
+          ? `${first(nameOf(payer))} settled ${INR(amount)} with you. All settled up.`
           : other
-            ? `${first(nameOf(payer))} settled ${INR(amount)} with ${first(nameOf(other))} in ${tName}`
-            : `${first(nameOf(payer))} settled up in ${tName}`;
+            ? `${first(nameOf(payer))} settled ${INR(amount)} with ${first(nameOf(other))}`
+            : `${first(nameOf(payer))} settled up`;
 
     } else if (kind === 'join') {
       const actorId = String(body.actorId || '');
@@ -179,7 +180,7 @@ export default async function handler(req: any, res: any) {
 
       const joined = norm(actorId);
       actor = joined;
-      bodyFor = () => `${first(nameOf(joined))} joined ${tName}`;
+      bodyFor = () => `${first(nameOf(joined))} joined`;
 
     } else {
       return res.status(400).json({ error: 'bad kind' });
@@ -201,9 +202,13 @@ export default async function handler(req: any, res: any) {
     await Promise.all(subs.map(async (s) => {
       const subscription = { endpoint: s.endpoint, keys: { p256dh: s.p_256_dh, auth: s.auth } };
       const payload = JSON.stringify({
-        title: 'SIMPLI',
+        // Galaxy as the title, event as the body — the shade already prints "SIMPLI"
+        // above it, so titling it 'SIMPLI' just said the app name twice.
+        title: tName,
         body: bodyFor(norm(s.user_id)),
         url: `/t/${tripId}`,
+        // Shared with the in-app notifier so the two never double up on one event.
+        tag: `simpli-${tripId}`,
       });
       try {
         await webpush.sendNotification(subscription as any, payload);
