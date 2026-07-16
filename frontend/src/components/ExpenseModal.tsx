@@ -4,6 +4,7 @@ import * as StDB from '../spacetimedb';
 import { toast } from './Toast';
 import type { Expense, ExpenseSplit } from '../module_bindings/types';
 import { AudioService } from '../audio';
+import { notifyServer } from '../push';
 
 const INR = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(v);
@@ -151,6 +152,8 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
           description: desc.trim(),
           splits: splitsJson,
         });
+        // The reducer has committed, so the row is readable by the push sender.
+        notifyServer({ kind: 'expense', tripId, expenseId });
         AudioService.playBlip();
         toast.success(`Added ${INR(totalAmt)}`);
       }

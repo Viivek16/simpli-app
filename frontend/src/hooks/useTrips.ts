@@ -87,21 +87,18 @@ export function useTrip(): Trip[] {
       }
     };
 
-    const cleanup = attach(StDB.conn as any);
-    if (cleanup) {
-      cleanupRef.current = cleanup;
-    } else {
-      // Wait for connection
-      const u1 = StDB.onSpacetimeConnect(() => {
-        const c = attach(StDB.conn as any);
-        if (c) cleanupRef.current = c;
-      });
-      // Re-load when identity resolves so fail-open trips get properly filtered
-      const u2 = StDB.onIdentityReady(() => load(StDB.conn as any));
-      // Re-load when subscription data arrives
-      const u3 = StDB.onSubscriptionApplied(() => load(StDB.conn as any));
-      cleanupRef.current = () => { u1(); u2(); u3(); };
-    }
+    // Re-attach on every (re)connect — a reconnect yields a new connection object
+    // and handlers bound to the previous one are dead.
+    let detach: (() => void) | undefined;
+    const u1 = StDB.withConnection((c) => {
+      detach?.();
+      detach = attach(c as any) || undefined;
+    });
+    // Re-load when identity resolves so fail-open trips get properly filtered
+    const u2 = StDB.onIdentityReady(() => load(StDB.conn as any));
+    // Re-load when subscription data arrives
+    const u3 = StDB.onSubscriptionApplied(() => load(StDB.conn as any));
+    cleanupRef.current = () => { u1(); u2(); u3(); detach?.(); };
 
     return () => {
       destroyed = true;
@@ -145,17 +142,16 @@ export function useTripMember(tripId: string): string[] {
       } catch { return false; }
     };
 
-    let inner: (() => void) | undefined;
-    const cleanup = attach(StDB.conn as any);
-    if (cleanup) { inner = cleanup; }
-    else {
-      const u = StDB.onSpacetimeConnect(() => {
-        inner = attach(StDB.conn as any) || undefined;
-      });
-      inner = u;
-    }
+    // Re-attach on every (re)connect; handlers on a superseded connection are dead.
+    let detach: (() => void) | undefined;
+    const u1 = StDB.withConnection((c) => {
+      detach?.();
+      detach = attach(c as any) || undefined;
+    });
+    // This list drives the planets in a galaxy — re-read once the first rows land.
+    const u2 = StDB.onSubscriptionApplied(() => load(StDB.conn as any));
 
-    return () => { destroyed = true; inner?.(); };
+    return () => { destroyed = true; u1(); u2(); detach?.(); };
   }, [tripId]);
 
   return members;

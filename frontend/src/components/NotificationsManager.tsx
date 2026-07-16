@@ -24,7 +24,7 @@ export const NotificationsManager = () => {
   const seenMember = useRef<Set<string>>(new Set());
   const tripNames = useRef<Map<string, string>>(new Map());
   const myTripIds = useRef<Set<string>>(new Set());
-  const attachedRef = useRef(false);
+  const detachRef = useRef<(() => void) | null>(null);
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
@@ -143,14 +143,27 @@ export const NotificationsManager = () => {
       showAppNotification(`${name} was removed`);
     };
 
+    // Re-register on every (re)connect. A reconnect yields a new connection object,
+    // so handlers left on the previous one never fire again. `seen*` refs survive
+    // across reconnects, which is what keeps the re-delivered rows silent while
+    // still announcing anything that happened while this device was offline.
     const attach = (c: any) => {
-      if (!c || attachedRef.current) return;
-      attachedRef.current = true;
+      if (!c) return;
+      detachRef.current?.();
       c.db.trip_member.onInsert(onMemberInsert);
       c.db.expense.onInsert(onExpenseInsert);
       c.db.expense.onDelete(onExpenseDelete);
       c.db.trip.onInsert(onTripInsert);
       c.db.trip.onDelete(onTripDelete);
+      detachRef.current = () => {
+        try {
+          c.db.trip_member.removeOnInsert(onMemberInsert);
+          c.db.expense.removeOnInsert(onExpenseInsert);
+          c.db.expense.removeOnDelete(onExpenseDelete);
+          c.db.trip.removeOnInsert(onTripInsert);
+          c.db.trip.removeOnDelete(onTripDelete);
+        } catch {}
+      };
     };
 
     const markReady = () => {
@@ -159,9 +172,9 @@ export const NotificationsManager = () => {
       setTimeout(() => { if (!disposed) readyRef.current = true; }, 600);
     };
 
-    if (StDB.conn) { attach(StDB.conn as any); if (StDB.subscriptionApplied) markReady(); }
-    const u1 = StDB.onSpacetimeConnect(() => attach(StDB.conn as any));
-    const u2 = StDB.onSubscriptionApplied(() => { attach(StDB.conn as any); markReady(); });
+    const u1 = StDB.withConnection((c) => attach(c as any));
+    const u2 = StDB.onSubscriptionApplied(() => markReady());
+    if (StDB.conn && StDB.subscriptionApplied) markReady();
 
     // Already-granted returning users: (re)register the push subscription on load.
     if (notificationsSupported() && Notification.permission === 'granted') { void enablePush(); }
@@ -175,17 +188,8 @@ export const NotificationsManager = () => {
       disposed = true;
       u1(); u2();
       if (bannerTimer) clearTimeout(bannerTimer);
-      const c = StDB.conn as any;
-      if (c && attachedRef.current) {
-        try {
-          c.db.trip_member.removeOnInsert(onMemberInsert);
-          c.db.expense.removeOnInsert(onExpenseInsert);
-          c.db.expense.removeOnDelete(onExpenseDelete);
-          c.db.trip.removeOnInsert(onTripInsert);
-          c.db.trip.removeOnDelete(onTripDelete);
-        } catch {}
-        attachedRef.current = false;
-      }
+      detachRef.current?.();
+      detachRef.current = null;
     };
   }, []);
 

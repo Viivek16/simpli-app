@@ -27,6 +27,15 @@ export const ExpenseSplit = __t.object("ExpenseSplit", {
 });
 export type ExpenseSplit = __Infer<typeof ExpenseSplit>;
 
+export const PushSubscription = __t.object("PushSubscription", {
+  endpoint: __t.string(),
+  userId: __t.string(),
+  p256Dh: __t.string(),
+  auth: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type PushSubscription = __Infer<typeof PushSubscription>;
+
 export const Trip = __t.object("Trip", {
   id: __t.string(),
   name: __t.string(),

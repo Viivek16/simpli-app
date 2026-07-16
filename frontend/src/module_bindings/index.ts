@@ -38,9 +38,11 @@ import AddExpenseReducer from "./add_expense_reducer";
 import CreateTripReducer from "./create_trip_reducer";
 import CreateUserReducer from "./create_user_reducer";
 import DeleteExpenseReducer from "./delete_expense_reducer";
+import DeletePushSubscriptionReducer from "./delete_push_subscription_reducer";
 import DeleteTripReducer from "./delete_trip_reducer";
 import JoinTripReducer from "./join_trip_reducer";
 import LinkDeviceReducer from "./link_device_reducer";
+import SavePushSubscriptionReducer from "./save_push_subscription_reducer";
 import SettleDebtReducer from "./settle_debt_reducer";
 import UpdateExpenseReducer from "./update_expense_reducer";
 
@@ -49,6 +51,7 @@ import UpdateExpenseReducer from "./update_expense_reducer";
 // Import all table schema definitions
 import ExpenseRow from "./expense_table";
 import ExpenseSplitRow from "./expense_split_table";
+import PushSubscriptionRow from "./push_subscription_table";
 import TripRow from "./trip_table";
 import TripMemberRow from "./trip_member_table";
 import UserRow from "./user_table";
@@ -85,6 +88,20 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, ExpenseSplitRow),
+  push_subscription: __table({
+    name: 'push_subscription',
+    indexes: [
+      { accessor: 'endpoint', name: 'push_subscription_endpoint_idx_btree', algorithm: 'btree', columns: [
+        'endpoint',
+      ] },
+      { accessor: 'user_id', name: 'push_subscription_user_id_idx_btree', algorithm: 'btree', columns: [
+        'userId',
+      ] },
+    ],
+    constraints: [
+      { name: 'push_subscription_endpoint_key', constraint: 'unique', columns: ['endpoint'] },
+    ],
+  }, PushSubscriptionRow),
   trip: __table({
     name: 'trip',
     indexes: [
@@ -142,9 +159,11 @@ const reducersSchema = __reducers(
   __reducerSchema("create_trip", CreateTripReducer),
   __reducerSchema("create_user", CreateUserReducer),
   __reducerSchema("delete_expense", DeleteExpenseReducer),
+  __reducerSchema("delete_push_subscription", DeletePushSubscriptionReducer),
   __reducerSchema("delete_trip", DeleteTripReducer),
   __reducerSchema("join_trip", JoinTripReducer),
   __reducerSchema("link_device", LinkDeviceReducer),
+  __reducerSchema("save_push_subscription", SavePushSubscriptionReducer),
   __reducerSchema("settle_debt", SettleDebtReducer),
   __reducerSchema("update_expense", UpdateExpenseReducer),
 );

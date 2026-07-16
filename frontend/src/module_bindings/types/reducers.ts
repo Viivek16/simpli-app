@@ -10,9 +10,11 @@ import AddExpenseReducer from "../add_expense_reducer";
 import CreateTripReducer from "../create_trip_reducer";
 import CreateUserReducer from "../create_user_reducer";
 import DeleteExpenseReducer from "../delete_expense_reducer";
+import DeletePushSubscriptionReducer from "../delete_push_subscription_reducer";
 import DeleteTripReducer from "../delete_trip_reducer";
 import JoinTripReducer from "../join_trip_reducer";
 import LinkDeviceReducer from "../link_device_reducer";
+import SavePushSubscriptionReducer from "../save_push_subscription_reducer";
 import SettleDebtReducer from "../settle_debt_reducer";
 import UpdateExpenseReducer from "../update_expense_reducer";
 
@@ -20,9 +22,11 @@ export type AddExpenseParams = __Infer<typeof AddExpenseReducer>;
 export type CreateTripParams = __Infer<typeof CreateTripReducer>;
 export type CreateUserParams = __Infer<typeof CreateUserReducer>;
 export type DeleteExpenseParams = __Infer<typeof DeleteExpenseReducer>;
+export type DeletePushSubscriptionParams = __Infer<typeof DeletePushSubscriptionReducer>;
 export type DeleteTripParams = __Infer<typeof DeleteTripReducer>;
 export type JoinTripParams = __Infer<typeof JoinTripReducer>;
 export type LinkDeviceParams = __Infer<typeof LinkDeviceReducer>;
+export type SavePushSubscriptionParams = __Infer<typeof SavePushSubscriptionReducer>;
 export type SettleDebtParams = __Infer<typeof SettleDebtReducer>;
 export type UpdateExpenseParams = __Infer<typeof UpdateExpenseReducer>;
 

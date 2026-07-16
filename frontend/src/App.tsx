@@ -26,6 +26,7 @@ import { InviteSheet } from './components/InviteSheet';
 import { BrandMark } from './components/BrandMark';
 import { NotificationsManager } from './components/NotificationsManager';
 import { selfDeletedTrips } from './notifications';
+import { notifyServer, disablePush } from './push';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster, toast } from './components/Toast';
 import { AudioService } from './audio';
@@ -301,15 +302,19 @@ const TripRoom = ({
 
   // Detect if trip was deleted while viewing
   useEffect(() => {
-    const c = StDB.conn as any;
-    if (!c) return;
     const onDel = (row: any) => {
       if (row?.id === trip.id) {
         onBack();
       }
     };
-    c.db.trip.onDelete(onDel);
-    return () => c.db.trip.removeOnDelete(onDel);
+    // Re-attach across reconnects; handlers on a superseded connection are dead.
+    let detach: (() => void) | undefined;
+    const un = StDB.withConnection((c: any) => {
+      detach?.();
+      c.db.trip.onDelete(onDel);
+      detach = () => { try { c.db.trip.removeOnDelete(onDel); } catch {} };
+    });
+    return () => { un(); detach?.(); };
   }, [trip.id, trip.name, onBack]);
 
   // Sync overlay status with App to pause background
@@ -1614,51 +1619,56 @@ function App() {
     return () => { u(); };
   }, []);
 
+  // Open a trip from an invite link, joining it first if we are not already in it.
+  // Runs against the first applied snapshot: that snapshot is what tells us whether
+  // this is a genuine join worth announcing (joinTrip is a silent no-op when already
+  // a member, so the reducer result alone cannot distinguish the two) and it carries
+  // the trip's real name.
+  const openInvite = useCallback((tripId: string) => {
+    const c = StDB.conn as any;
+    if (!c) return;
+    const me = norm(StDB.getLocalId() ?? '');
+    const wasMember = [...c.db.trip_member.iter()].some(
+      (m: any) => (m.tripId ?? m.trip_id) === tripId && norm(m.userId ?? m.user_id) === me
+    );
+    void (async () => {
+      try {
+        await c.reducers.joinTrip({ tripId });
+        if (!wasMember && me) notifyServer({ kind: 'join', tripId, actorId: me });
+      } catch { /* already a member, or offline — the ledger still opens below */ }
+    })();
+    try {
+      const row = [...c.db.trip.iter()].find((t: any) => t.id === tripId);
+      selectTrip({ id: tripId, name: row?.name || 'Opening group…' });
+    } catch { selectTrip({ id: tripId, name: 'Opening group…' }); }
+  }, [selectTrip]);
+
   // Handle /t/:tripId invite links
   useEffect(() => {
     const match = window.location.pathname.match(/^\/t\/([^/]+)/);
-    if (match) {
-      const tripId = match[1];
-      const fn = () => {
-        const c = StDB.conn as any;
-        if (c) {
-          try { c.reducers.joinTrip({ tripId }); } catch { /* already member */ }
-          // Resolve trip name from the live cache; if it hasn't replicated yet, use a
-          // neutral placeholder (never the raw id) — the sync effect fills in the real name.
-          try {
-            const row = [...c.db.trip.iter()].find((t: any) => t.id === tripId);
-            selectTrip({ id: tripId, name: row?.name || 'Opening group…' });
-          } catch { selectTrip({ id: tripId, name: 'Opening group…' }); }
-        }
-      };
-      if (StDB.conn) fn();
-      else {
-        const u = onSpacetimeConnect(fn);
-        return () => u();
-      }
-    }
-  }, []);
+    if (!match) return;
+    const tripId = match[1];
+    let handled = false;
+    // Guarded: onSubscriptionApplied also fires on every reconnect, and re-running
+    // this would yank the user back to the invited trip mid-session.
+    const fn = () => { if (handled) return; handled = true; openInvite(tripId); };
+    if (StDB.subscriptionApplied) { fn(); return; }
+    const u = onSubscriptionApplied(fn);
+    return () => u();
+  }, [openInvite]);
 
   // Pending trip from pre-auth invite
   useEffect(() => {
     if (!profile) return;
     const pending = sessionStorage.getItem('simpli_pending_trip');
-    if (pending) {
-      sessionStorage.removeItem('simpli_pending_trip');
-      const fn = () => {
-        const c = StDB.conn as any;
-        if (c) {
-          try { c.reducers.joinTrip({ tripId: pending }); } catch {}
-          try {
-            const row = [...c.db.trip.iter()].find((t: any) => t.id === pending);
-            selectTrip({ id: pending, name: row?.name || 'Opening group…' });
-          } catch { selectTrip({ id: pending, name: 'Opening group…' }); }
-        }
-      };
-      if (StDB.conn) fn();
-      else { const u = onSpacetimeConnect(fn); return () => u(); }
-    }
-  }, [profile]);
+    if (!pending) return;
+    sessionStorage.removeItem('simpli_pending_trip');
+    let handled = false;
+    const fn = () => { if (handled) return; handled = true; openInvite(pending); };
+    if (StDB.subscriptionApplied) { fn(); return; }
+    const u = onSubscriptionApplied(fn);
+    return () => u();
+  }, [profile, openInvite]);
 
   const handleLogin = (p: GoogleProfile) => {
     localStorage.setItem('simpli_user', JSON.stringify(p));
@@ -1696,7 +1706,7 @@ function App() {
   }, [profile]);
 
   const handleLogout = () => {
-    void import('./push').then(m => m.disablePush()).catch(() => {});
+    void disablePush();
     localStorage.removeItem('simpli_user');
     googleLogout();
     setProfile(null);

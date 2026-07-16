@@ -29,15 +29,16 @@ export function useUserDevice(): any[] {
       } catch { return false; }
     };
 
-    let cleanup = attach(StDB.conn as any);
-    let un: (() => void) | undefined;
-    if (!cleanup) {
-      un = StDB.onSpacetimeConnect(() => { cleanup = attach(StDB.conn as any); });
-    }
+    // Re-attach on every (re)connect; handlers on a superseded connection are dead.
+    let detach: (() => void) | undefined;
+    const un = StDB.withConnection((c) => {
+      detach?.();
+      detach = attach(c as any) || undefined;
+    });
+    const u2 = StDB.onSubscriptionApplied(() => load(StDB.conn as any));
     return () => {
       destroyed = true;
-      if (typeof cleanup === 'function') cleanup();
-      if (un) un();
+      un(); u2(); detach?.();
     };
   }, []);
 

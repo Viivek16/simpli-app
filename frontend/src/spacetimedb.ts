@@ -122,16 +122,51 @@ const setupSubscription = (c: DbConnection) => {
   }
 };
 
-export const initSpacetimeDB = () => {
-  if (conn) return conn;
+// ── Reconnect ──────────────────────────────────────────────────────────────────
+// The SDK does not resurrect a dropped socket, and it hands back a brand-new
+// DbConnection object per attempt rather than reviving the old one. Mobile
+// browsers close the WebSocket whenever the PWA is backgrounded, so without this
+// the app silently shows stale data until the process is killed and relaunched.
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30_000;
+// A socket suspended by the OS often stays half-open: `isActive` still reads true
+// while no data can flow, and the close event only lands minutes later. Past this
+// much time backgrounded we stop trusting the old socket and just rebuild.
+const STALE_AFTER_HIDDEN_MS = 10_000;
 
-  seedActiveAccount();
+let reconnectAttempt = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let started = false;
+let hiddenAt = 0;
+// True while a handshake is in flight. `isActive` is false during one too, so
+// without this `wake()` would mistake a connecting socket for a dead one and tear
+// it down — pageshow fires on every load, so that would double-connect every time.
+let connecting = false;
 
+const clearReconnect = () => {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+};
+
+const scheduleReconnect = () => {
+  if (reconnectTimer) return;
+  const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
+  reconnectAttempt++;
+  reconnectTimer = setTimeout(() => { reconnectTimer = null; build(); }, delay);
+};
+
+const build = (): DbConnection => {
+  connecting = true;
+  // Re-read the token on every attempt: ensureAccount may have swapped it to a
+  // different account's identity since the last connect.
   conn = DbConnection.builder()
     .withUri(SPACETIMEDB_URI)
     .withDatabaseName(DATABASE_NAME)
     .withToken(localStorage.getItem(LEGACY_TOKEN_KEY) || "")
     .onConnect((_connection, identity, token) => {
+      // A superseded connection can still finish its handshake after we replaced it.
+      if (_connection !== (conn as any)) return;
+      connecting = false;
+      reconnectAttempt = 0;
       localIdentity = identity.toHexString().toLowerCase();
       console.log("✅ Connected to SpacetimeDB:", DATABASE_NAME, "Identity:", localIdentity);
       if (token) {
@@ -144,15 +179,79 @@ export const initSpacetimeDB = () => {
       setupSubscription(_connection);
     })
     .onConnectError((_ctx, err) => {
+      if (_ctx !== (conn as any)) return;
+      connecting = false;
       console.error("❌ SpacetimeDB connection error:", err);
       fireErr(errorCbs, err);
+      scheduleReconnect();
     })
     .onDisconnect((_ctx, _err) => {
+      if (_ctx !== (conn as any)) return;
+      connecting = false;
       console.log("🔌 Disconnected from SpacetimeDB.");
       subscriptionApplied = false;
       fire(disconnectCbs);
+      scheduleReconnect();
     })
     .build();
 
   return conn;
+};
+
+/** Drop the current socket (alive or half-open) and start a fresh one immediately. */
+const rebuildNow = () => {
+  clearReconnect();
+  reconnectAttempt = 0;
+  const old = conn as any;
+  build(); // reassigns `conn` first, so the old socket's close event is ignored above
+  try { old?.disconnect(); } catch { /* already gone */ }
+};
+
+// Returning to the foreground / regaining network is the moment the user expects
+// to see the truth, so resolve it there rather than waiting out the backoff.
+const wake = () => {
+  if (!started) return;
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+  const hiddenFor = hiddenAt ? Date.now() - hiddenAt : 0;
+  hiddenAt = 0;
+  if (connecting) return; // a handshake is already in flight; let it finish
+  if (!(conn as any)?.isActive) { rebuildNow(); return; }
+  if (hiddenFor > STALE_AFTER_HIDDEN_MS) rebuildNow();
+};
+
+const onVisibility = () => {
+  if (typeof document === 'undefined') return;
+  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+  wake();
+};
+
+export const initSpacetimeDB = () => {
+  if (started) return conn;
+  started = true;
+
+  // One-time back-compat seed; must not re-run per reconnect.
+  seedActiveAccount();
+
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', wake);
+    window.addEventListener('pageshow', wake);
+  }
+
+  return build();
+};
+
+/**
+ * Run `fn` against the live connection now and again after every reconnect.
+ * Each reconnect produces a NEW DbConnection, so row handlers registered on the
+ * previous object are dead and every caller has to re-register them. Callers
+ * should drop their old handlers when re-invoked. Returns an unsubscribe.
+ */
+export const withConnection = (fn: (c: DbConnection) => void): (() => void) => {
+  const run = () => {
+    if (!conn) return;
+    try { fn(conn); } catch (e) { console.error('[SIMPLI]', e); }
+  };
+  run();
+  return onSpacetimeConnect(run);
 };

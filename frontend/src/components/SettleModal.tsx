@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import * as StDB from '../spacetimedb';
 import { toast } from './Toast';
 import { AudioService } from '../audio';
+import { notifyServer } from '../push';
 
 const INR = (v: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
@@ -51,6 +52,8 @@ export const SettleModal = ({ payload, onClose, tripId, userMap, localId }: Prop
         payeeId: payload.payeeId,
         amount: Math.round(parsed * 100) / 100,
       });
+      // The reducer has committed, so the settlement row is readable by the push sender.
+      notifyServer({ kind: 'settle', tripId, debtorId: payload.payerId });
       AudioService.playBlip();
       setPhase('done');
       setTimeout(() => {

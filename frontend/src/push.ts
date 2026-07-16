@@ -8,11 +8,11 @@
  *   3. the user has granted notification permission.
  *
  * When those hold, we subscribe via the service worker's PushManager and hand the
- * subscription to the module (savePushSubscription reducer). The external
- * push-sender service reads those rows and delivers pushes when the app is closed.
+ * subscription to the module (savePushSubscription reducer). The /api/notify
+ * function reads those rows and delivers the push when the app is closed.
  *
- * If VITE_VAPID_PUBLIC_KEY is absent (default), every function here is a safe no-op,
- * so shipping this file changes nothing until push infrastructure is configured.
+ * If VITE_VAPID_PUBLIC_KEY is absent, every function here is a safe no-op, so the
+ * app degrades to in-app + tab-alive notifications rather than breaking.
  */
 import * as StDB from './spacetimedb';
 
@@ -68,14 +68,42 @@ export const enablePush = async (): Promise<void> => {
     if (!endpoint || !p256dh || !auth) return;
 
     const c = StDB.conn as any;
-    // The reducer only exists once the module is republished + bindings regenerated.
-    if (c?.reducers?.savePushSubscription) {
-      c.reducers.savePushSubscription({ endpoint, p256dh, auth });
-    }
+    if (!c) return;
+    // The param is `p256Dh` (capital D) — that is how the generated bindings name
+    // the module's `p256dh` column. Passing `p256dh` does not match the schema.
+    c.reducers.savePushSubscription({ endpoint, p256Dh: p256dh, auth });
   } catch (e) {
     // Non-fatal: this is an enhancement layer over in-app notifications.
     console.warn('[push] enable failed', e);
   }
+};
+
+/**
+ * Events worth waking someone's phone for. `settle` carries no expense id because
+ * settleDebt mints that id inside the reducer — the server matches it instead.
+ */
+export type NotifyEvent =
+  | { kind: 'expense'; tripId: string; expenseId: string }
+  | { kind: 'settle'; tripId: string; debtorId: string }
+  | { kind: 'join'; tripId: string; actorId: string };
+
+/**
+ * Ask the server to fan a push out to the other members of a trip, for an event
+ * this device just committed.
+ *
+ * Deliberately fire-and-forget: the reducer has already landed, so a failed
+ * notification must never surface as an error on the action the user just took.
+ * `keepalive` lets the request outlive the page if they close it immediately after.
+ */
+export const notifyServer = (event: NotifyEvent): void => {
+  try {
+    void fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+      keepalive: true,
+    }).catch(() => { /* notifications are never load-bearing */ });
+  } catch { /* ignore */ }
 };
 
 /** Remove this device's push subscription (used on logout). */
@@ -88,6 +116,6 @@ export const disablePush = async (): Promise<void> => {
     const endpoint = sub.endpoint;
     await sub.unsubscribe().catch(() => {});
     const c = StDB.conn as any;
-    if (c?.reducers?.deletePushSubscription) c.reducers.deletePushSubscription({ endpoint });
+    if (c) c.reducers.deletePushSubscription({ endpoint });
   } catch { /* ignore */ }
 };
