@@ -6,7 +6,7 @@ import { AudioService } from '../audio';
 import { notifyServer } from '../push';
 
 const INR = (v: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 
 interface Props {
   payload: { payerId: string; payeeId: string; amount: number } | null;
@@ -22,7 +22,7 @@ export const SettleModal = ({ payload, onClose, tripId, userMap, localId }: Prop
 
   useEffect(() => {
     if (payload) {
-      setAmountStr(String(Math.round(payload.amount)));
+      setAmountStr(String(Math.round(payload.amount * 100) / 100));
       setPhase('form');
     }
   }, [payload]);

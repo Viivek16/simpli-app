@@ -40,7 +40,7 @@ const GalaxyBackground = lazy(() =>
 
 const EO = [0.23, 1, 0.32, 1] as const;
 const INR = (v: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 
 interface GoogleProfile { name: string; email: string; picture: string; sub: string; }
@@ -762,7 +762,7 @@ const TripRoom = ({
                   <button onClick={() => {
                     const payerId = isPositive ? d.otherId : localId;
                     const payeeId = isPositive ? localId : d.otherId;
-                    setSettlePayload({ payerId, payeeId, amount: Math.round(Math.abs(d.amount)) });
+                    setSettlePayload({ payerId, payeeId, amount: Math.abs(d.amount) });
                   }} style={{ background: 'transparent', border: '1px solid var(--self)', color: '#ffffff', borderRadius: '12px', height: '34px', padding: '0 12px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Settle</button>
                 </div>
               );
@@ -921,9 +921,9 @@ const TripRoom = ({
                               <line x1="4" y1="12" x2="20" y2="12" /><polyline points="13 5 20 12 13 19" />
                             </svg>
                             <span style={{ color: 'var(--owed)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{toName}</span>
-                            <span className="money" style={{ color: 'var(--text)', fontWeight: 700, marginLeft: '4px', flexShrink: 0 }}>{INR(Math.round(t.amount))}</span>
+                            <span className="money" style={{ color: 'var(--text)', fontWeight: 700, marginLeft: '4px', flexShrink: 0 }}>{INR(t.amount)}</span>
                           </div>
-                          <button onClick={() => setSettlePayload({ payerId: t.from, payeeId: t.to, amount: Math.round(t.amount) })}
+                          <button onClick={() => setSettlePayload({ payerId: t.from, payeeId: t.to, amount: t.amount })}
                             style={{ background: 'transparent', border: '1px solid var(--self)', color: '#ffffff', borderRadius: '12px', height: '30px', padding: '0 10px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
                             Settle
                           </button>
@@ -1127,7 +1127,7 @@ const TripRoom = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSettlePayload({ payerId: starDebt.payerId, payeeId: starDebt.payeeId, amount: Math.round(starDebt.amount) });
+                  setSettlePayload({ payerId: starDebt.payerId, payeeId: starDebt.payeeId, amount: starDebt.amount });
                   onStarClick(null);
                 }}
                 className="btn-primary"

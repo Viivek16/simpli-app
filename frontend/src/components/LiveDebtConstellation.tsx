@@ -21,7 +21,7 @@ import { AudioService } from '../audio';
 import { buildOwesMap, pairNet } from '../lib/ledger';
 
 const INR = (v: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 

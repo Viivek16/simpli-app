@@ -4,7 +4,7 @@ import { useExpense, useExpenseSplit } from '../module_bindings/hooks';
 import * as StDB from '../spacetimedb';
 
 const INR = (v: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 

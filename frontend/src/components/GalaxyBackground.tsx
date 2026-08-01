@@ -263,8 +263,8 @@ const SwirlingGalaxy = ({
                 </div>
               ) : netBalances ? (
                 <>
-                  {netBalances.amtOwed > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>{netBalances.owed} owes</span> +₹{Math.round(netBalances.amtOwed)}</div>}
-                  {netBalances.amtOwes > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>You owe {netBalances.owes}</span> -₹{Math.round(netBalances.amtOwes)}</div>}
+                  {netBalances.amtOwed > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>{netBalances.owed} owes</span> +₹{netBalances.amtOwed.toFixed(2)}</div>}
+                  {netBalances.amtOwes > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>You owe {netBalances.owes}</span> -₹{netBalances.amtOwes.toFixed(2)}</div>}
                   {netBalances.amtOwed === 0 && netBalances.amtOwes === 0 && <div style={{ color: 'var(--text-dim)' }}>You are settled up</div>}
                 </>
               ) : null}
