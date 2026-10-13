@@ -2,15 +2,16 @@ import { useEffect, useMemo } from 'react';
 import { motion, useSpring, useTransform } from 'framer-motion';
 import { useExpense, useExpenseSplit } from '../module_bindings/hooks';
 import * as StDB from '../spacetimedb';
-
-const INR = (v: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+import { money } from '../lib/currency';
+import { useTripCurrency } from '../hooks/useTripCurrency';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 
 interface Props { tripId: string; }
 
 export const KarmaBar = ({ tripId }: Props) => {
+  const currency = useTripCurrency(tripId);
+  const INR = (v: number) => money(v, currency);
   const splits = useExpenseSplit();
   const expenses = useExpense();
   const me = norm(StDB.getLocalId() ?? '');

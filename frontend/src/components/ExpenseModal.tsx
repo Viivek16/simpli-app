@@ -5,9 +5,8 @@ import { toast } from './Toast';
 import type { Expense, ExpenseSplit } from '../module_bindings/types';
 import { AudioService } from '../audio';
 import { notifyServer } from '../push';
-
-const INR = (v: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(v);
+import { CURRENCIES, currencyMeta, money } from '../lib/currency';
+import { useTripCurrency, setTripCurrency } from '../hooks/useTripCurrency';
 
 const S: Record<string, React.CSSProperties> = {
   input: {
@@ -53,6 +52,13 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
     const allEqual = amounts.every(a => Math.abs(a - amounts[0]) < 0.01);
     return allEqual ? 'equally' : 'unequal';
   };
+
+  // One currency per trip: the dropdown edits the trip's currency, not this row's.
+  const tripCode = useTripCurrency(tripId);
+  const [code, setCode] = useState(tripCode);
+  // Another member switching currency mid-edit should move this dialog with it.
+  useEffect(() => { setCode(tripCode); }, [tripCode]);
+  const INR = useCallback((v: number) => money(v, code), [code]);
 
   const [desc, setDesc] = useState(editExpense?.description ?? '');
   const [amt, setAmt] = useState(editExpense ? String(editExpense.amount) : '');
@@ -165,7 +171,17 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
     } finally {
       setLoading(false);
     }
-  }, [canSubmit, desc, totalAmt, mode, selectedArr, isEdit, editExpense, tripId, onClose]);
+  }, [canSubmit, desc, totalAmt, mode, selectedArr, isEdit, editExpense, tripId, onClose, INR, payerId]);
+
+  // Currency is a property of the trip, so the pick lands for every member at once —
+  // no conversion, the existing numbers simply relabel.
+  const changeCurrency = (next: string) => {
+    setCode(next);
+    setTripCurrency(tripId, next).catch((e: any) => {
+      toast.error(e?.message ?? 'Could not change trip currency');
+      setCode(tripCode);
+    });
+  };
 
   const toggleMember = (id: string) => {
     setSelected(prev => {
@@ -245,11 +261,31 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
             placeholder="Airbnb, dinner, taxi…" style={S.input} autoFocus />
         </div>
 
-        {/* Amount */}
+        {/* Amount + trip currency */}
         <div>
-          <label htmlFor={`${uid}-a`} style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 600 }}>Amount (₹)</label>
-          <input id={`${uid}-a`} type="number" min="0.01" step="0.01" value={amt}
-            onChange={e => setAmt(e.target.value)} placeholder="0.00" style={S.input} className="money" />
+          <label htmlFor={`${uid}-a`} style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '8px', fontWeight: 600 }}>Amount</label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <select
+              aria-label="Currency"
+              value={code}
+              onChange={e => changeCurrency(e.target.value)}
+              style={{
+                ...S.input, width: 'auto', flex: '0 0 auto', paddingRight: '10px',
+                cursor: 'pointer', fontWeight: 600, appearance: 'none',
+              }}
+            >
+              {CURRENCIES.map(c => (
+                <option key={c.code} value={c.code} style={{ background: '#0a0c10', color: '#fff' }}>
+                  {c.symbol === c.code ? c.code : `${c.symbol} ${c.code}`}
+                </option>
+              ))}
+            </select>
+            <input id={`${uid}-a`} type="number" min="0.01" step="0.01" value={amt}
+              onChange={e => setAmt(e.target.value)} placeholder="0.00" style={{ ...S.input, flex: 1 }} className="money" />
+          </div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '6px' }}>
+            {currencyMeta(code).label} · applies to the whole trip
+          </div>
         </div>
 
         {/* Paid By (show unless personal) */}
@@ -334,7 +370,7 @@ export const ExpenseModal = ({ tripId, tripMembers, onClose, editExpense }: Prop
         {/* Personal info */}
         {mode === 'personal' && (
           <p className="glass-panel" style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-dim)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--glass-brd)' }}>
-            Tracked for you only — not split with anyone.
+            Tracked for you only — not split with anyone. Still counts toward your trip total.
           </p>
         )}
 

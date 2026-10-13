@@ -115,6 +115,7 @@ const setupSubscription = (c: DbConnection) => {
         'SELECT * FROM expense',
         'SELECT * FROM expense_split',
         'SELECT * FROM trip_member',
+        'SELECT * FROM trip_currency',
         'SELECT * FROM user_device',
       ]);
   } catch (e) {

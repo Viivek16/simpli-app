@@ -16,6 +16,16 @@ const spacetimedb = schema({
       created_at: t.timestamp(),
     }
   ),
+  // One display currency per trip. Separate table (not a column on `trip`) because
+  // SpacetimeDB auto-migrates added tables but not added columns — a column would
+  // have required republishing with --delete-data, wiping live trips.
+  trip_currency: table(
+    { public: true },
+    {
+      trip_id: t.string().primaryKey(),
+      code: t.string(),
+    }
+  ),
   expense: table(
     { public: true },
     {
@@ -143,6 +153,21 @@ export const joinTrip = spacetimedb.reducer(
       if (m.user_id === user_id) return;
     }
     ctx.db.trip_member.insert({ trip_id, user_id });
+  }
+);
+
+// One currency per trip, set from the add-expense dialog by any member. Display only:
+// no conversion is applied to amounts already recorded.
+export const setTripCurrency = spacetimedb.reducer(
+  { trip_id: t.string(), code: t.string() },
+  (ctx, { trip_id, code }) => {
+    requireMember(ctx, trip_id);
+    const existing = ctx.db.trip_currency.trip_id.find(trip_id);
+    if (existing) {
+      if (existing.code === code) return;
+      ctx.db.trip_currency.delete(existing);
+    }
+    ctx.db.trip_currency.insert({ trip_id, code });
   }
 );
 
@@ -337,6 +362,8 @@ export const deleteTrip = spacetimedb.reducer(
     for (const m of ctx.db.trip_member.trip_id.filter(trip_id)) {
       ctx.db.trip_member.delete(m);
     }
+    const currency = ctx.db.trip_currency.trip_id.find(trip_id);
+    if (currency) ctx.db.trip_currency.delete(currency);
     const trip = ctx.db.trip.id.find(trip_id);
     if (trip) ctx.db.trip.delete(trip);
   }

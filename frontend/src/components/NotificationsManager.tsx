@@ -3,11 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import * as StDB from '../spacetimedb';
 import { showAppNotification, requestNotificationPermission, notificationsSupported, selfDeletedTrips, tagForTrip } from '../notifications';
 import { enablePush } from '../push';
+import { money } from '../lib/currency';
+import { tripCurrency } from '../hooks/useTripCurrency';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 const first = (name: string) => (name || 'Someone').split(' ')[0];
-const INR = (v: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+// Notifications span every trip the user is in, so the currency is looked up per row
+// rather than bound to one trip the way the in-trip views can.
+const INR = (v: number, tripId: string) => money(v, tripCurrency(tripId));
 
 const BANNER_KEY = 'simpli_notif_decided';
 
@@ -122,11 +125,11 @@ export const NotificationsManager = () => {
       if ((row.description || '') === 'Debt settlement') {
         let other = '';
         for (const s of c.db.expense_split.iter()) { if (sExp(s) === row.id) { other = sDebtor(s); break; } }
-        if (other === me) showAppNotification(`${first(nameOf(c, payer))} settled ${INR(row.amount)} with you in ${tName}. All settled up.`, o(`${first(nameOf(c, payer))} settled ${INR(row.amount)} with you. All settled up.`));
-        else if (other) showAppNotification(`${first(nameOf(c, payer))} settled ${INR(row.amount)} with ${first(nameOf(c, other))} in ${tName}`, o(`${first(nameOf(c, payer))} settled ${INR(row.amount)} with ${first(nameOf(c, other))}`));
+        if (other === me) showAppNotification(`${first(nameOf(c, payer))} settled ${INR(row.amount, tripId)} with you in ${tName}. All settled up.`, o(`${first(nameOf(c, payer))} settled ${INR(row.amount, tripId)} with you. All settled up.`));
+        else if (other) showAppNotification(`${first(nameOf(c, payer))} settled ${INR(row.amount, tripId)} with ${first(nameOf(c, other))} in ${tName}`, o(`${first(nameOf(c, payer))} settled ${INR(row.amount, tripId)} with ${first(nameOf(c, other))}`));
         else showAppNotification(`${first(nameOf(c, payer))} settled up in ${tName}`, o(`${first(nameOf(c, payer))} settled up`));
       } else {
-        const line = `${first(nameOf(c, payer))} added ${row.description || 'an expense'} \u00b7 ${INR(row.amount)}`;
+        const line = `${first(nameOf(c, payer))} added ${row.description || 'an expense'} \u00b7 ${INR(row.amount, tripId)}`;
         showAppNotification(line, o(line));
       }
     };

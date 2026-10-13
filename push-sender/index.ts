@@ -43,8 +43,17 @@ webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 // ── helpers ──────────────────────────────────────────────────────────────────
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 const first = (n: string) => (n || 'Someone').split(' ')[0];
-const INR = (v: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+// Push bodies are whole-rupee-style (no decimals) for brevity, but must carry the
+// currency the trip is actually denominated in. Same table the app reads.
+const INR = (c: any, v: number, tripId: string) => {
+  let code = 'INR';
+  try { code = c?.db?.trip_currency?.trip_id?.find(tripId)?.code || 'INR'; } catch {}
+  try {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: code, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v);
+  } catch {
+    return `${code} ${Math.round(v)}`;
+  }
+};
 
 const eTrip = (r: any) => r.tripId ?? r.trip_id;
 const ePayer = (r: any) => norm(r.payerId ?? r.payer_id);
@@ -123,10 +132,10 @@ const onExpense = async (c: any, row: any) => {
       let other = '';
       for (const s of c.db.expense_split.iter()) { if (sExp(s) === row.id) { other = sDebtor(s); break; } }
       body = other === uid
-        ? `${first(nameOf(c, payer))} settled ${INR(row.amount)} with you in ${tName}. All settled up.`
+        ? `${first(nameOf(c, payer))} settled ${INR(c, row.amount, tripId)} with you in ${tName}. All settled up.`
         : `${first(nameOf(c, payer))} settled up in ${tName}`;
     } else {
-      body = `${first(nameOf(c, payer))} added ${row.description || 'an expense'} · ${INR(row.amount)} in ${tName}`;
+      body = `${first(nameOf(c, payer))} added ${row.description || 'an expense'} · ${INR(c, row.amount, tripId)} in ${tName}`;
     }
     await sendTo(c, uid, { title: 'SIMPLI', body, url: `/t/${tripId}` });
   }
@@ -176,6 +185,7 @@ DbConnection.builder()
         'SELECT * FROM expense',
         'SELECT * FROM expense_split',
         'SELECT * FROM trip_member',
+        'SELECT * FROM trip_currency',
         'SELECT * FROM user_device',
         'SELECT * FROM push_subscription',
       ]);

@@ -18,10 +18,9 @@ import { useUserDevice } from '../hooks/useUserDevice';
 import { resolveNames } from '../lib/names';
 import * as StDB from '../spacetimedb';
 import { AudioService } from '../audio';
-import { buildOwesMap, pairNet } from '../lib/ledger';
-
-const INR = (v: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+import { buildOwesMap, pairNet, spentByMember } from '../lib/ledger';
+import { money } from '../lib/currency';
+import { useTripCurrency } from '../hooks/useTripCurrency';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 
@@ -85,6 +84,8 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
   const ref = useRef<THREE.Group>(null);
 
   const localId = norm(StDB.getLocalId() ?? '');
+  const currency = useTripCurrency(activeTripId);
+  const INR = (v: number) => money(v, currency);
 
   // Build member user map (id → name). Members are keyed by Google sub after the
   // device-link migration, so we use the shared resolver which bridges
@@ -126,6 +127,18 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
     return debts;
   }, [members, owes]);
 
+  // What each member has actually paid out here, personal expenses included. A solo
+  // traveller nets zero debt forever, so without this their star could never light up.
+  const spent = useMemo(() => {
+    return spentByMember(expenses.filter(e => e.tripId === activeTripId));
+  }, [expenses, activeTripId]);
+
+  const maxSpend = useMemo(() => {
+    let max = 0;
+    members.forEach(m => { max = Math.max(max, spent[m.id] || 0); });
+    return max || 1;
+  }, [members, spent]);
+
   const maxNetDebt = useMemo(() => {
     let max = 0;
     Object.values(netDebts).forEach(v => { max = Math.max(max, Math.abs(v)); });
@@ -148,9 +161,10 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
           radius * Math.sin(theta) * Math.sin(phi),
         ),
         netDebt: netDebts[m.id] || 0,
+        spend: spent[m.id] || 0,
       };
     });
-  }, [members, netDebts]);
+  }, [members, netDebts, spent]);
 
   const isSolo = members.length <= 1;
 
@@ -259,14 +273,21 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
         const settled = Math.abs(node.netDebt) < 0.5;
         const isDebtInvolved = Math.abs(node.netDebt) > 0.5;
         const debtRatio = isDebtInvolved ? Math.min(Math.abs(node.netDebt) / maxNetDebt, 1) : 0;
+        // Spending lights a star even with nothing owed either way — otherwise a solo
+        // traveller logging personal expenses sits in a dead galaxy. Debt still burns
+        // brighter, so an open balance remains the loudest thing on screen.
+        const hasSpend = node.spend > 0.005;
+        const lit = isDebtInvolved || hasSpend;
+        const glowRatio = isDebtInvolved ? debtRatio : Math.min(node.spend / maxSpend, 1) * 0.45;
+        const dark = !lit;
         const color = isLocal ? '#FFB74D' : '#5EE6FF';
 
-        const emissiveIntensity = settled ? 0.16 : (0.45 + debtRatio * 1.3);
-        const coreColor = settled ? '#9aa0aa' : color;
-        const shellColor = settled ? '#8b93a3' : color;
-        const shellStrength = settled ? 0.24 : (0.35 + debtRatio * 0.5);
+        const emissiveIntensity = dark ? 0.16 : (0.45 + glowRatio * 1.3);
+        const coreColor = dark ? '#9aa0aa' : color;
+        const shellColor = dark ? '#8b93a3' : color;
+        const shellStrength = dark ? 0.24 : (0.35 + glowRatio * 0.5);
 
-        const labelColor = settled ? '#6b7280' : (node.netDebt > 0 ? 'var(--owed)' : 'var(--owe)');
+        const labelColor = settled ? (hasSpend ? 'var(--text-dim)' : '#6b7280') : (node.netDebt > 0 ? 'var(--owed)' : 'var(--owe)');
         const isSelected = selectedMemberId === node.id;
 
         return (
@@ -298,22 +319,22 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
             {/* Fresnel atmosphere shell (static, view-dependent limb glow) */}
             <AtmosphereShell color={shellColor} strength={shellStrength} radius={0.62} />
 
-            {/* Layered additive halo for members involved in debt (intensity proportional to debt) */}
-            {isDebtInvolved && (
+            {/* Layered additive halo, scaled by whatever is lighting this star */}
+            {lit && (
               <group>
-                <sprite raycast={() => null} scale={[1.8 + debtRatio * 2.2, 1.8 + debtRatio * 2.2, 1]} userData={{ baseOpacity: 0.12 + debtRatio * 0.16 }}>
+                <sprite raycast={() => null} scale={[1.8 + glowRatio * 2.2, 1.8 + glowRatio * 2.2, 1]} userData={{ baseOpacity: 0.12 + glowRatio * 0.16 }}>
                   <spriteMaterial
                     map={haloTexture}
                     color={color}
-                    transparent opacity={0.12 + debtRatio * 0.16}
+                    transparent opacity={0.12 + glowRatio * 0.16}
                     blending={THREE.AdditiveBlending} depthWrite={false}
                   />
                 </sprite>
-                <sprite raycast={() => null} scale={[3.0 + debtRatio * 3.5, 3.0 + debtRatio * 3.5, 1]} userData={{ baseOpacity: (0.12 + debtRatio * 0.16) * 0.4 }}>
+                <sprite raycast={() => null} scale={[3.0 + glowRatio * 3.5, 3.0 + glowRatio * 3.5, 1]} userData={{ baseOpacity: (0.12 + glowRatio * 0.16) * 0.4 }}>
                   <spriteMaterial
                     map={haloTexture}
                     color={color}
-                    transparent opacity={(0.12 + debtRatio * 0.16) * 0.4}
+                    transparent opacity={(0.12 + glowRatio * 0.16) * 0.4}
                     blending={THREE.AdditiveBlending} depthWrite={false}
                   />
                 </sprite>
@@ -321,8 +342,8 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
             )}
 
             {/* Point light for glowing planets */}
-            {isDebtInvolved && (
-              <pointLight color={color} intensity={0.5 + debtRatio * 1.5} distance={9} decay={2} />
+            {lit && (
+              <pointLight color={color} intensity={0.5 + glowRatio * 1.5} distance={9} decay={2} />
             )}
 
             {/* Label */}
@@ -345,7 +366,9 @@ export const LiveDebtConstellation = ({ activeTripId, hoveredStar, onStarHover, 
                     <div className="money" style={{
                       color: labelColor, fontSize: '0.75rem', fontWeight: 700, marginTop: '2px',
                     }}>
-                      {settled ? 'Settled' : (node.netDebt > 0 ? '+' : '') + INR(node.netDebt)}
+                      {settled
+                        ? (hasSpend ? `${INR(node.spend)} spent` : 'Settled')
+                        : (node.netDebt > 0 ? '+' : '') + INR(node.netDebt)}
                     </div>
                   </motion.div>
                 </div>

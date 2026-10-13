@@ -22,5 +22,8 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  /* *.check.ts are node-run self-checks, not app code — they import node builtins
+     the browser build has no types for, and nothing bundles them. */
+  "exclude": ["src/**/*.check.ts"]
 }

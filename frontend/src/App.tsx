@@ -16,6 +16,8 @@ import { useUserDevice } from './hooks/useUserDevice';
 import { useIsMobile } from './hooks/useIsMobile';
 import { resolveNames } from './lib/names';
 import { buildOwesMap, pairNet } from './lib/ledger';
+import { money } from './lib/currency';
+import { useTripCurrency } from './hooks/useTripCurrency';
 import { ExpenseModal } from './components/ExpenseModal';
 import type { HomeView } from './components/GalaxyBackground';
 import { LeaderboardSidebar } from './components/LeaderboardSidebar';
@@ -39,8 +41,6 @@ const GalaxyBackground = lazy(() =>
 );
 
 const EO = [0.23, 1, 0.32, 1] as const;
-const INR = (v: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
 
 interface GoogleProfile { name: string; email: string; picture: string; sub: string; }
@@ -287,6 +287,10 @@ const TripRoom = ({
 
   const localId = norm(StDB.getLocalId() ?? '');
 
+  // Every amount in this room is denominated in the trip's own currency.
+  const currency = useTripCurrency(trip.id);
+  const INR = useCallback((v: number) => money(v, currency), [currency]);
+
   // Build user map for name lookups (resolves both identity hex and Google sub -> name)
   const userDevices = useUserDevice();
   const userMap = useMemo(() => resolveNames(allUsers, userDevices), [allUsers, userDevices]);
@@ -452,7 +456,7 @@ const TripRoom = ({
       paid: memberPaid.get(m.id) || 0
     })).filter(x => x.paid > 0).sort((a, b) => b.paid - a.paid);
 
-    return { totalGroupSpend, groupBreakdown, yourExpenses, youSpent, youOwedBack };
+    return { totalGroupSpend, groupBreakdown, yourExpenses, youSpent, youOwedBack, memberPaid };
   }, [tripExpenses, splits, tripMembers, localId]);
 
   // Minimum cash flow debt simplification.
@@ -741,6 +745,20 @@ const TripRoom = ({
           </div>
           <div className="money" style={{ fontSize: '1.2rem', fontWeight: 600, color: headerContext.amount === 0 ? 'var(--text-dim)' : (headerContext.type === 'overall' ? (headerContext.amount > 0 ? 'var(--owed)' : 'var(--owe)') : 'var(--owe)') }}>
             {headerContext.amount === 0 ? (headerContext.type === 'overall' ? 'Settled up' : `Settled with ${headerContext.name}`) : (headerContext.amount > 0 ? (headerContext.type === 'overall' ? `You're owed ${INR(Math.abs(headerContext.amount))}` : `${headerContext.name} owes you ${INR(Math.abs(headerContext.amount))}`) : (headerContext.type === 'overall' ? `You owe ${INR(Math.abs(headerContext.amount))}` : `You owe ${headerContext.name} ${INR(Math.abs(headerContext.amount))}`))}
+          </div>
+          {/* Spend runs alongside balance: a solo traveller is always "settled" yet has
+              still spent money, and that total is the whole point of the trip ledger. */}
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: '2px' }}>
+            {headerContext.type === 'overall' ? (
+              <>
+                You've spent <span className="money" style={{ color: 'var(--text)', fontWeight: 600 }}>{INR(insightsData.youSpent)}</span>
+                {tripMembers.length > 1 && <> · trip total <span className="money" style={{ fontWeight: 600 }}>{INR(insightsData.totalGroupSpend)}</span></>}
+              </>
+            ) : (
+              <>
+                {headerContext.name} spent <span className="money" style={{ color: 'var(--text)', fontWeight: 600 }}>{INR(insightsData.memberPaid.get(selectedMemberId || '') || 0)}</span>
+              </>
+            )}
           </div>
         </div>
 
@@ -1122,6 +1140,13 @@ const TripRoom = ({
                   </div>
                 </>
               )}
+              {/* Spend stands on its own — personal expenses never create a balance. */}
+              <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+                Spent in this trip
+                <div className="money" style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)', marginTop: '2px' }}>
+                  {INR(insightsData.memberPaid.get(selectedMemberId) || 0)}
+                </div>
+              </div>
             </div>
             {selectedMemberId !== localId && starDebt && starDebt.dir !== 'settled' && starDebt.amount > 0.5 && (
               <button
