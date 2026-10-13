@@ -23,7 +23,9 @@ import type { Trip } from '../hooks/useTrips';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import * as StDB from '../spacetimedb';
 import { AudioService } from '../audio';
-import { buildOwesMap, pairNet, isTripSettled } from '../lib/ledger';
+import { buildOwesMap, pairNet, isTripSettled, spentByMember } from '../lib/ledger';
+import { money, DEFAULT_CURRENCY } from '../lib/currency';
+import { tripCurrency } from '../hooks/useTripCurrency';
 import { useUserDevice } from '../hooks/useUserDevice';
 import { useClosedTrips } from '../hooks/useTripClosed';
 import { resolveNames } from '../lib/names';
@@ -104,11 +106,14 @@ export type HomeView = 'active' | 'settled';
 let sharedGlowTex: THREE.CanvasTexture | null = null;
 
 const SwirlingGalaxy = ({
-  position, colorCoreStr, colorEdgeStr, onClick, name, hovered, selected, hidden, index, settled, netBalances, onHoverChange
+  position, colorCoreStr, colorEdgeStr, onClick, name, hovered, selected, hidden, index, settled, netBalances, spend, currency, onHoverChange
 }: {
   position: THREE.Vector3; colorCoreStr: string; colorEdgeStr: string;
   onClick?: () => void; name?: string; hovered?: boolean; selected?: boolean; hidden?: boolean; index: number;
   settled: boolean; netBalances: { owes: string; owed: string; amtOwes: number; amtOwed: number } | null;
+  // What the local user has spent in this trip, and the trip's own currency —
+  // a galaxy with no debts has a total worth showing even though nobody owes anyone.
+  spend: number; currency: string;
   onHoverChange?: (h: boolean) => void;
 }) => {
   const ref = useRef<THREE.Group>(null);
@@ -262,13 +267,20 @@ const SwirlingGalaxy = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-dim)' }}>
                   <span style={{ color: 'var(--owed)' }}>✓</span> Settled up
                 </div>
-              ) : netBalances ? (
+              ) : netBalances && (netBalances.amtOwed > 0 || netBalances.amtOwes > 0) ? (
                 <>
-                  {netBalances.amtOwed > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>{netBalances.owed} owes</span> +₹{netBalances.amtOwed.toFixed(2)}</div>}
-                  {netBalances.amtOwes > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>You owe {netBalances.owes}</span> -₹{netBalances.amtOwes.toFixed(2)}</div>}
-                  {netBalances.amtOwed === 0 && netBalances.amtOwes === 0 && <div style={{ color: 'var(--text-dim)' }}>You are settled up</div>}
+                  {netBalances.amtOwed > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>{netBalances.owed} owes</span> +{money(netBalances.amtOwed, currency)}</div>}
+                  {netBalances.amtOwes > 0 && <div style={{ color: 'var(--owe)' }}><span style={{ color: 'var(--text-dim)' }}>You owe {netBalances.owes}</span> -{money(netBalances.amtOwes, currency)}</div>}
                 </>
-              ) : null}
+              ) : (
+                /* No debt to report. A personal expense tracker lives here permanently,
+                   so the pill falls back to the running total instead of rendering empty. */
+                <div style={{ color: 'var(--text-dim)' }}>
+                  {spend > 0
+                    ? <>You've spent <span style={{ color: 'var(--text)', fontWeight: 700 }}>{money(spend, currency)}</span></>
+                    : 'No expenses yet'}
+                </div>
+              )}
             </div>
           )}
         </Html>
@@ -444,7 +456,7 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
   hoveredStar: string | null;
   onStarHover: (id: string | null) => void;
   onStarClick: (id: string | null) => void;
-  tripBalances: Record<string, { settled: boolean, netBalances: { owes: string, owed: string, amtOwes: number, amtOwed: number } | null }>;
+  tripBalances: Record<string, { settled: boolean, netBalances: { owes: string, owed: string, amtOwes: number, amtOwed: number } | null, spend: number, currency: string }>;
   selectedMemberId?: string | null;
   onSelectedStarPosUpdate?: (pos: { x: number, y: number } | null) => void;
   homeView: HomeView;
@@ -544,7 +556,7 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
         {/* ── Macro View: only the current sector's galaxies are shown/interactive.
              Held back until `ready` so trips render already-classified (no active-sector flash). ── */}
         {ready && !(activeTripId && settled) && layout.items.map(({ trip, pos, cols, idx, sector }) => {
-          const bal = tripBalances[trip.id] || { settled: false, netBalances: null };
+          const bal = tripBalances[trip.id] || { settled: false, netBalances: null, spend: 0, currency: DEFAULT_CURRENCY };
           const hidden = activeTripId !== null || sector !== homeView;
           return (
             <SwirlingGalaxy
@@ -561,6 +573,8 @@ const GalaxyScene = ({ activeTripId, trips, onSelectTrip, uiPaused, hoveredStar,
               onHoverChange={hidden ? undefined : (h) => setHoveredTripId(h ? trip.id : (prev => prev === trip.id ? null : prev))}
               settled={bal.settled}
               netBalances={bal.netBalances}
+              spend={bal.spend}
+              currency={bal.currency}
             />
           );
         })}
@@ -620,7 +634,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
   const tripBalances = useMemo(() => {
     const m = resolveNames(allUsers, userDevices);
 
-    const res: Record<string, { settled: boolean, netBalances: { owes: string, owed: string, amtOwes: number, amtOwed: number } | null }> = {};
+    const res: Record<string, { settled: boolean, netBalances: { owes: string, owed: string, amtOwes: number, amtOwed: number } | null, spend: number, currency: string }> = {};
     trips.forEach(trip => {
       const tripExp = expenses.filter(e => e.tripId === trip.id);
       const owes = buildOwesMap(tripExp, splits);
@@ -636,9 +650,11 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
       });
 
       const settled = isTripSettled(owes, localId, Object.keys(netUser), closedTrips.has(trip.id));
+      const spend = spentByMember(tripExp)[localId] || 0;
+      const currency = tripCurrency(trip.id);
 
       if (settled) {
-        res[trip.id] = { settled: true, netBalances: null };
+        res[trip.id] = { settled: true, netBalances: null, spend, currency };
       } else {
         // Find biggest pairwise balance for local user
         let amtOwed = 0; let owedBy = '';
@@ -651,7 +667,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
           if (amt < -0.5 && Math.abs(amt) > amtOwes) { amtOwes = Math.abs(amt); owesTo = m.get(otherId) || 'Member'; }
         });
         
-        res[trip.id] = { settled: false, netBalances: (amtOwed > 0 || amtOwes > 0) ? { owes: owesTo, owed: owedBy, amtOwes, amtOwed } : null };
+        res[trip.id] = { settled: false, netBalances: (amtOwed > 0 || amtOwes > 0) ? { owes: owesTo, owed: owedBy, amtOwes, amtOwed } : null, spend, currency };
       }
     });
     return res;
