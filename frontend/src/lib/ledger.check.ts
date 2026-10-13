@@ -7,7 +7,7 @@
  * touch split maths, spend aggregation, or currency formatting.
  */
 import assert from 'node:assert/strict';
-import { buildOwesMap, pairNet, spentByMember } from './ledger.ts';
+import { buildOwesMap, pairNet, spentByMember, isTripSettled, SETTLEMENT_DESC } from './ledger.ts';
 import { money, currencyMeta, CURRENCIES, DEFAULT_CURRENCY } from './currency.ts';
 
 const exp = (id: string, payerId: string, amount: number, description = 'x') =>
@@ -83,6 +83,34 @@ const split = (expenseId: string, debtorId: string, amountOwed: number) =>
   assert.equal(new Set(symbols).size, symbols.length, 'currency symbols must be unique');
   const codes = CURRENCIES.map(c => c.code);
   assert.equal(new Set(codes).size, codes.length, 'currency codes must be unique');
+}
+
+// ── Settled sector: zero balance alone must not banish a solo tracker ────────
+{
+  const personal = buildOwesMap([exp('e1', 'me', 10), exp('e2', 'me', 15)], []);
+  assert.equal(isTripSettled(personal, 'me', ['me'], false), false,
+    'a personal-only trip stays active');
+  assert.equal(isTripSettled(personal, 'me', ['me'], true), true,
+    'closing it by hand is the way out');
+
+  // A real group: open debt stays active, clearing it settles the trip.
+  const open = buildOwesMap(
+    [exp('g1', 'me', 100)],
+    [split('g1', 'me', 50), split('g1', 'shubham', 50)],
+  );
+  assert.equal(isTripSettled(open, 'me', ['me', 'shubham'], false), false);
+
+  const cleared = buildOwesMap(
+    [exp('g1', 'me', 100), exp('s1', 'shubham', 50, SETTLEMENT_DESC)],
+    [
+      split('g1', 'me', 50), split('g1', 'shubham', 50),
+      split('s1', 'me', 50),
+    ],
+  );
+  assert.equal(isTripSettled(cleared, 'me', ['me', 'shubham'], false), true,
+    'settling up still files a real group away');
+
+  assert.equal(isTripSettled({}, 'me', [], false), false, 'an empty trip is active');
 }
 
 console.log('ledger.check.ts — all assertions passed');

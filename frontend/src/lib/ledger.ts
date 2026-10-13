@@ -39,3 +39,26 @@ export function spentByMember(expenses: any[]): Record<string, number> {
   });
   return spent;
 }
+
+/**
+ * Does a trip belong in the distant "settled" sector rather than the active home screen?
+ *
+ * A zero balance is not enough on its own. A trip holding only personal expenses nets to
+ * zero from its very first row, so inferring settlement from balance alone would file a
+ * solo expense tracker away before the trip had started. Two routes in:
+ *   - `closed`: someone closed the trip by hand. The only route for a solo trip.
+ *   - the trip carried real debt between members and that debt has cleared — the
+ *     settle-up path.
+ * `owes` holds cross-member debt only (buildOwesMap drops self-splits), so a non-empty
+ * map is exactly "this trip had something to settle".
+ */
+export function isTripSettled(
+  owes: Record<string, Record<string, number>>,
+  meId: string,
+  otherIds: string[],
+  closed: boolean,
+): boolean {
+  if (closed) return true;
+  if (Object.keys(owes).length === 0) return false;
+  return otherIds.every(id => id === meId || Math.abs(pairNet(owes, meId, id)) <= 0.5);
+}

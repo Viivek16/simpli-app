@@ -43,6 +43,7 @@ import DeleteTripReducer from "./delete_trip_reducer";
 import JoinTripReducer from "./join_trip_reducer";
 import LinkDeviceReducer from "./link_device_reducer";
 import SavePushSubscriptionReducer from "./save_push_subscription_reducer";
+import SetTripClosedReducer from "./set_trip_closed_reducer";
 import SetTripCurrencyReducer from "./set_trip_currency_reducer";
 import SettleDebtReducer from "./settle_debt_reducer";
 import UpdateExpenseReducer from "./update_expense_reducer";
@@ -54,6 +55,7 @@ import ExpenseRow from "./expense_table";
 import ExpenseSplitRow from "./expense_split_table";
 import PushSubscriptionRow from "./push_subscription_table";
 import TripRow from "./trip_table";
+import TripClosedRow from "./trip_closed_table";
 import TripCurrencyRow from "./trip_currency_table";
 import TripMemberRow from "./trip_member_table";
 import UserRow from "./user_table";
@@ -115,6 +117,17 @@ const tablesSchema = __schema({
       { name: 'trip_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, TripRow),
+  trip_closed: __table({
+    name: 'trip_closed',
+    indexes: [
+      { accessor: 'trip_id', name: 'trip_closed_trip_id_idx_btree', algorithm: 'btree', columns: [
+        'tripId',
+      ] },
+    ],
+    constraints: [
+      { name: 'trip_closed_trip_id_key', constraint: 'unique', columns: ['tripId'] },
+    ],
+  }, TripClosedRow),
   trip_currency: __table({
     name: 'trip_currency',
     indexes: [
@@ -177,6 +190,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_trip", JoinTripReducer),
   __reducerSchema("link_device", LinkDeviceReducer),
   __reducerSchema("save_push_subscription", SavePushSubscriptionReducer),
+  __reducerSchema("set_trip_closed", SetTripClosedReducer),
   __reducerSchema("set_trip_currency", SetTripCurrencyReducer),
   __reducerSchema("settle_debt", SettleDebtReducer),
   __reducerSchema("update_expense", UpdateExpenseReducer),

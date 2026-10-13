@@ -43,6 +43,11 @@ export const Trip = __t.object("Trip", {
 });
 export type Trip = __Infer<typeof Trip>;
 
+export const TripClosed = __t.object("TripClosed", {
+  tripId: __t.string(),
+});
+export type TripClosed = __Infer<typeof TripClosed>;
+
 export const TripCurrency = __t.object("TripCurrency", {
   tripId: __t.string(),
   code: __t.string(),

@@ -18,6 +18,7 @@ import { resolveNames } from './lib/names';
 import { buildOwesMap, pairNet } from './lib/ledger';
 import { money } from './lib/currency';
 import { useTripCurrency } from './hooks/useTripCurrency';
+import { useClosedTrips, setTripClosed } from './hooks/useTripClosed';
 import { ExpenseModal } from './components/ExpenseModal';
 import type { HomeView } from './components/GalaxyBackground';
 import { LeaderboardSidebar } from './components/LeaderboardSidebar';
@@ -64,6 +65,14 @@ const BTN_GHOST: React.CSSProperties = {
   transition: 'background 160ms ease',
   fontFamily: 'inherit',
 };
+
+// Close / reopen glyphs — check-in-circle, and a counter-clockwise arrow for undo.
+const CloseIcon = ({ size }: { size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.8 10A10 10 0 1 1 17 3.3" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+);
+const ReopenIcon = ({ size }: { size: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
+);
 
 // ─── Brand wordmark ─────────────────────────────────────────────────────────────
 // "SIMPLI" tracked out to span exactly the width of the "BUILT ON SPACETIMEDB"
@@ -286,6 +295,24 @@ const TripRoom = ({
   const tripMemberIds = useTripMember(trip.id);
 
   const localId = norm(StDB.getLocalId() ?? '');
+
+  // Closing a galaxy is how a trip reaches the settled sector when it never carried
+  // debt — a personal expense tracker nets to zero and would never settle itself.
+  const closedTrips = useClosedTrips();
+  const isClosed = closedTrips.has(trip.id);
+  const [closing, setClosing] = useState(false);
+  const toggleClosed = async () => {
+    setClosing(true);
+    try {
+      await setTripClosed(trip.id, !isClosed);
+      AudioService.playBlip();
+      toast.success(isClosed ? 'Galaxy reopened' : 'Galaxy closed — moved to settled');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Could not update galaxy');
+    } finally {
+      setClosing(false);
+    }
+  };
 
   // Every amount in this room is denominated in the trip's own currency.
   const currency = useTripCurrency(trip.id);
@@ -564,6 +591,14 @@ const TripRoom = ({
             {/* Right: compact action cluster */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
               <button
+                onClick={toggleClosed}
+                disabled={closing}
+                style={{ ...BTN_GHOST, width: 30, height: 30, padding: 0, color: isClosed ? 'var(--owed)' : 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: closing ? 0.5 : 1 }}
+                title={isClosed ? 'Reopen galaxy' : 'Close galaxy'} aria-label={isClosed ? 'Reopen galaxy' : 'Close galaxy'}
+              >
+                {isClosed ? <ReopenIcon size={16} /> : <CloseIcon size={16} />}
+              </button>
+              <button
                 onClick={() => setShowDeleteTrip(true)}
                 style={{ ...BTN_GHOST, width: 30, height: 30, padding: 0, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 title="Delete galaxy" aria-label="Delete galaxy"
@@ -609,6 +644,15 @@ const TripRoom = ({
             </button>
 
             <div style={{ flex: 1 }} />
+
+            <button
+              onClick={toggleClosed}
+              disabled={closing}
+              style={{ ...BTN_GHOST, padding: '8px', color: isClosed ? 'var(--owed)' : 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: closing ? 0.5 : 1 }}
+              title={isClosed ? 'Reopen galaxy' : 'Close galaxy'} aria-label={isClosed ? 'Reopen galaxy' : 'Close galaxy'}
+            >
+              {isClosed ? <ReopenIcon size={20} /> : <CloseIcon size={20} />}
+            </button>
 
             {/* Galaxy settings (Trash) */}
             <button

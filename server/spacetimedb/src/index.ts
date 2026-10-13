@@ -26,6 +26,15 @@ const spacetimedb = schema({
       code: t.string(),
     }
   ),
+  // Presence of a row = the trip is closed and belongs in the settled sector.
+  // Explicit, because a trip tracking only personal expenses nets to zero from day
+  // one and would otherwise be filed as settled before it even starts.
+  trip_closed: table(
+    { public: true },
+    {
+      trip_id: t.string().primaryKey(),
+    }
+  ),
   expense: table(
     { public: true },
     {
@@ -168,6 +177,20 @@ export const setTripCurrency = spacetimedb.reducer(
       ctx.db.trip_currency.delete(existing);
     }
     ctx.db.trip_currency.insert({ trip_id, code });
+  }
+);
+
+// Close or reopen a trip. Reversible, so no confirmation gate on the client.
+export const setTripClosed = spacetimedb.reducer(
+  { trip_id: t.string(), closed: t.bool() },
+  (ctx, { trip_id, closed }) => {
+    requireMember(ctx, trip_id);
+    const existing = ctx.db.trip_closed.trip_id.find(trip_id);
+    if (closed) {
+      if (!existing) ctx.db.trip_closed.insert({ trip_id });
+    } else if (existing) {
+      ctx.db.trip_closed.delete(existing);
+    }
   }
 );
 
@@ -364,6 +387,8 @@ export const deleteTrip = spacetimedb.reducer(
     }
     const currency = ctx.db.trip_currency.trip_id.find(trip_id);
     if (currency) ctx.db.trip_currency.delete(currency);
+    const closed = ctx.db.trip_closed.trip_id.find(trip_id);
+    if (closed) ctx.db.trip_closed.delete(closed);
     const trip = ctx.db.trip.id.find(trip_id);
     if (trip) ctx.db.trip.delete(trip);
   }

@@ -23,8 +23,9 @@ import type { Trip } from '../hooks/useTrips';
 import { useExpense, useExpenseSplit, useUser } from '../module_bindings/hooks';
 import * as StDB from '../spacetimedb';
 import { AudioService } from '../audio';
-import { buildOwesMap, pairNet } from '../lib/ledger';
+import { buildOwesMap, pairNet, isTripSettled } from '../lib/ledger';
 import { useUserDevice } from '../hooks/useUserDevice';
+import { useClosedTrips } from '../hooks/useTripClosed';
 import { resolveNames } from '../lib/names';
 
 const norm = (s: any) => String(s ?? '').toLowerCase().trim();
@@ -613,6 +614,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
   const allUsers = useUser();
   const userDevices = useUserDevice();
   const localId = norm(StDB.getLocalId() ?? '');
+  const closedTrips = useClosedTrips();
 
   // Calculate net balances per trip
   const tripBalances = useMemo(() => {
@@ -633,14 +635,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
         });
       });
 
-      // A brand-new group with no expenses yet is NOT "settled" — it belongs on the active
-      // home screen, not the settled sector. A group is only settled once it has activity
-      // that nets to zero from the local user's perspective.
-      let settled = tripExp.length > 0;
-      Object.keys(netUser).forEach(otherId => {
-        if (otherId === localId) return;
-        if (Math.abs(pairNet(owes, localId, otherId)) > 0.5) settled = false;
-      });
+      const settled = isTripSettled(owes, localId, Object.keys(netUser), closedTrips.has(trip.id));
 
       if (settled) {
         res[trip.id] = { settled: true, netBalances: null };
@@ -660,7 +655,7 @@ export const GalaxyBackground = ({ trips, activeTripId, onSelectTrip, uiPaused, 
       }
     });
     return res;
-  }, [trips, expenses, splits, allUsers, userDevices, localId]);
+  }, [trips, expenses, splits, allUsers, userDevices, localId, closedTrips]);
 
   // Report active/settled sector counts to the shell (drives the settled-sector control).
   useEffect(() => {
